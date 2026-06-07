@@ -19,13 +19,14 @@ The MVP is local-first, stdlib-first, and review-first.
 
 ## What SkillLoop does
 
-- Normalizes generic JSONL and Hermes-style traces
+- Normalizes generic JSONL, Hermes-style exports, and Hermes `state.db` sessions
 - Stores traces, evaluations, and proposals in local SQLite
 - Scores traces with deterministic heuristics
 - Detects durable user preferences, corrections, success signals, and reusable workflows
 - Creates memory and skill proposals instead of silently mutating global state
 - Applies approved proposals only into the selected project directory
-- Exports SFT JSONL and DPO JSONL datasets
+- Exports SFT JSONL and DPO JSONL datasets with optional score gates
+- Redacts common secret patterns during ingestion/export
 
 ## What SkillLoop does not do in v1
 
@@ -56,8 +57,8 @@ python -m skillloop.cli --path . traces list
 python -m skillloop.cli --path . eval latest
 python -m skillloop.cli --path . distill latest
 python -m skillloop.cli --path . review list --verbose
-python -m skillloop.cli --path . export sft --out data/sft.jsonl
-python -m skillloop.cli --path . export dpo --out data/dpo.jsonl
+python -m skillloop.cli --path . export sft --out data/sft.jsonl --min-score 70
+python -m skillloop.cli --path . export dpo --out data/dpo.jsonl --min-score 70
 ```
 
 The `review list` output shows proposal IDs. To test the approval/apply path, approve a listed proposal by full ID or unique prefix, then run `apply`:
@@ -79,7 +80,9 @@ skillloop --path . ingest generic examples/traces/simple_trace.jsonl
 ```text
 skillloop --path <project-root> init
 skillloop --path <project-root> ingest generic <jsonl-path>
-skillloop --path <project-root> ingest hermes <json-or-jsonl-path>
+skillloop --path <project-root> ingest hermes <json-path>
+skillloop --path <project-root> ingest hermes-db --latest [--db-path ~/.hermes/state.db]
+skillloop --path <project-root> ingest hermes-db --session-id <id> [--db-path ~/.hermes/state.db]
 skillloop --path <project-root> traces list
 skillloop --path <project-root> traces show <trace-id|latest>
 skillloop --path <project-root> eval <trace-id|latest>
@@ -88,8 +91,8 @@ skillloop --path <project-root> review list [--verbose]
 skillloop --path <project-root> review approve <proposal-id-prefix>
 skillloop --path <project-root> review reject <proposal-id-prefix>
 skillloop --path <project-root> apply
-skillloop --path <project-root> export sft --out <path>
-skillloop --path <project-root> export dpo --out <path>
+skillloop --path <project-root> export sft --out <path> [--min-score N]
+skillloop --path <project-root> export dpo --out <path> [--min-score N]
 ```
 
 ## Clean export boundary
@@ -144,13 +147,18 @@ python -m pip wheel . --no-deps -w /tmp/skillloop-wheel-check
 
 Expected MVP result: all tests pass and the sample workflow exports at least one SFT record.
 
-## Roadmap
+## Proof-of-work status
 
-- Add richer adapters for Hermes session DB exports, Claude Code, Codex, and OpenCode traces
-- Add pluggable LLM-as-judge evaluation
-- Add stronger secret redaction and PII controls for trace ingestion
-- Add dataset curation policies and split generation
-- Add optional runtime integrations while preserving the clean export boundary
+This repository is an initial proof-of-work for the SkillLoop architecture. It already demonstrates the core loop:
+
+trace ingestion → evaluation → memory/skill proposals → human review → safe local apply → fine-tuning data export
+
+See:
+
+- `docs/architecture.md` for system design
+- `docs/cli.md` for commands
+- `docs/safety.md` for safety boundaries
+- `docs/trace-schema.md` for data format
 
 ## License
 

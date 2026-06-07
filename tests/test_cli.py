@@ -1,16 +1,18 @@
-from pathlib import Path
+import json
+import sqlite3
 
 from skillloop.cli import main
 
 
-def test_cli_end_to_end_clean_export(tmp_path):
+def test_cli_ingest_eval_distill_export_flow(tmp_path, capsys):
     trace_path = tmp_path / "trace.jsonl"
     trace_path.write_text(
-        '\n'.join([
-            '{"role":"user","content":"Remember that I prefer concise answers."}',
-            '{"role":"user","content":"When debugging tests, first reproduce, then patch."}',
-            '{"role":"assistant","content":"Done and verified."}',
-        ])
+        "\n".join(
+            [
+                json.dumps({"role": "user", "content": "Remember that I prefer concise answers in terminal."}),
+                json.dumps({"role": "assistant", "content": "Done. Verified with tests."}),
+            ]
+        )
     )
 
     assert main(["--path", str(tmp_path), "init"]) == 0
@@ -18,11 +20,51 @@ def test_cli_end_to_end_clean_export(tmp_path):
     assert main(["--path", str(tmp_path), "traces", "list"]) == 0
     assert main(["--path", str(tmp_path), "eval", "latest"]) == 0
     assert main(["--path", str(tmp_path), "distill", "latest"]) == 0
+    assert main(["--path", str(tmp_path), "review", "list"]) == 0
 
-    proposals = list((tmp_path / ".skillloop").glob("**/*"))
-    assert proposals
+    out_path = tmp_path / "data" / "sft.jsonl"
+    assert main(["--path", str(tmp_path), "export", "sft", "--out", str(out_path), "--min-score", "70"]) == 0
 
-    sft_out = tmp_path / "data" / "sft.jsonl"
-    assert main(["--path", str(tmp_path), "export", "sft", "--out", str(sft_out)]) == 0
-    assert sft_out.exists()
-    assert '"messages"' in sft_out.read_text()
+    lines = out_path.read_text().splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["messages"][0]["role"] == "user"
+    output = capsys.readouterr().out
+    assert "Ingested" in output
+    assert "Created" in output
+
+
+def test_cli_export_min_score_skips_low_quality_trace(tmp_path):
+    trace_path = tmp_path / "trace.jsonl"
+    trace_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"role": "user", "content": "do it"}),
+                json.dumps({"role": "assistant", "content": "error failed"}),
+            ]
+        )
+    )
+
+    assert main(["--path", str(tmp_path), "ingest", "generic", str(trace_path)]) == 0
+    assert main(["--path", str(tmp_path), "eval", "latest"]) == 0
+    out_path = tmp_path / "data" / "sft.jsonl"
+    assert main(["--path", str(tmp_path), "export", "sft", "--out", str(out_path), "--min-score", "70"]) == 0
+
+    assert out_path.read_text() == ""
+
+
+def test_cli_ingests_hermes_state_db_latest(tmp_path, capsys):
+    db = tmp_path / "state.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, title TEXT, started_at REAL, ended_at REAL, message_count INTEGER)")
+    conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, timestamp REAL, active INTEGER)")
+    conn.execute("INSERT INTO sessions VALUES ('s1', 'cli', 'Session', 1.0, NULL, 2)")
+    conn.execute("INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'user', 'hello', NULL, 1.1, 1)")
+    conn.execute("INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'assistant', 'hi', NULL, 1.2, 1)")
+    conn.commit()
+    conn.close()
+
+    assert main(["--path", str(tmp_path), "ingest", "hermes-db", "--db-path", str(db), "--latest"]) == 0
+    assert main(["--path", str(tmp_path), "traces", "list"]) == 0
+
+    output = capsys.readouterr().out
+    assert "hermes_state_db" in output

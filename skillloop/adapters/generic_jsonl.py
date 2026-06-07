@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from skillloop.sanitize import redact_secrets
 from skillloop.schema import AgentMessage, AgentTrace
 
 
@@ -16,7 +17,7 @@ def load_generic_jsonl(path: str | Path) -> AgentTrace:
         messages.append(
             AgentMessage(
                 role=str(data.get("role", "user")),
-                content=str(data.get("content") or ""),
+                content=redact_secrets(str(data.get("content") or "")),
                 metadata={"line_no": line_no, **dict(data.get("metadata") or {})},
             )
         )

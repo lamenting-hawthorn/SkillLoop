@@ -16,6 +16,17 @@ def test_memory_distiller_finds_user_preference():
     assert "concise answers" in proposals[0].content
 
 
+def test_memory_distiller_does_not_mix_workflow_into_preference():
+    trace = AgentTrace(
+        source="test",
+        messages=[AgentMessage(role="user", content="Remember that I prefer concise terminal summaries. When fixing gateway issues, first check logs, then config, then restart." )],
+    )
+
+    proposals = propose_memory_updates(trace)
+
+    assert proposals[0].content == "i prefer concise terminal summaries"
+
+
 def test_skill_distiller_finds_repeated_workflow_signal():
     trace = AgentTrace(
         source="test",

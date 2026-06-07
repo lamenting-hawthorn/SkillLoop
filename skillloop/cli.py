@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
-from skillloop.adapters.hermes import load_hermes_export
+from skillloop.adapters.hermes import load_hermes_export, load_hermes_state_db
 from skillloop.apply.filesystem import export_approved
 from skillloop.distill.memory import propose_memory_updates
 from skillloop.distill.skills import propose_skill_updates
@@ -52,9 +52,15 @@ def cmd_init(args: argparse.Namespace) -> int:
 def cmd_ingest(args: argparse.Namespace) -> int:
     store = _store(args)
     if args.adapter == "generic":
+        if not args.input:
+            raise SystemExit("generic ingest requires an input JSONL path")
         trace = load_generic_jsonl(args.input)
     elif args.adapter == "hermes":
+        if not args.input:
+            raise SystemExit("hermes ingest requires an input JSON path")
         trace = load_hermes_export(args.input)
+    elif args.adapter == "hermes-db":
+        trace = load_hermes_state_db(args.db_path, session_id=args.session_id, latest=args.latest)
     else:
         raise SystemExit(f"Unsupported adapter: {args.adapter}")
     trace_id = store.save_trace(trace)
@@ -159,6 +165,14 @@ def cmd_export(args: argparse.Namespace) -> int:
     traces = store.list_traces()
     if args.trace_id:
         traces = [_resolve_trace(store, args.trace_id)]
+    if args.min_score is not None:
+        filtered = []
+        for trace in traces:
+            evaluations = store.list_evaluations(trace.id)
+            best_score = max((evaluation.score for evaluation in evaluations), default=None)
+            if best_score is not None and best_score >= args.min_score:
+                filtered.append(trace)
+        traces = filtered
     if args.format == "sft":
         records = export_sft_records(traces)
     elif args.format == "dpo":
@@ -179,8 +193,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.set_defaults(func=cmd_init)
 
     p_ingest = sub.add_parser("ingest", help="Ingest a trace")
-    p_ingest.add_argument("adapter", choices=["generic", "hermes"])
-    p_ingest.add_argument("input")
+    p_ingest.add_argument("adapter", choices=["generic", "hermes", "hermes-db"])
+    p_ingest.add_argument("input", nargs="?", help="Input JSONL/JSON path for generic or hermes adapters")
+    p_ingest.add_argument("--db-path", default=str(Path.home() / ".hermes" / "state.db"), help="Hermes state.db path for hermes-db adapter")
+    p_ingest.add_argument("--session-id", default=None, help="Hermes session id for hermes-db adapter")
+    p_ingest.add_argument("--latest", action="store_true", help="Use latest Hermes session with messages for hermes-db adapter")
     p_ingest.set_defaults(func=cmd_ingest)
 
     p_traces = sub.add_parser("traces", help="List/show traces")
@@ -221,6 +238,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_export.add_argument("format", choices=["sft", "dpo"])
     p_export.add_argument("--out", required=True)
     p_export.add_argument("--trace-id", default=None, help="Optional trace id/prefix, or latest")
+    p_export.add_argument("--min-score", type=int, default=None, help="Only export traces with an evaluation score >= this value")
     p_export.set_defaults(func=cmd_export)
 
     return parser

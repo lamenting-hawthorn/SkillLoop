@@ -18,6 +18,13 @@ def _safe(text: str) -> bool:
     return not any(pattern in lowered for pattern in SECRET_PATTERNS)
 
 
+def _first_sentence(text: str) -> str:
+    # Keep memory atomic. If the user combines a durable preference with a
+    # workflow/procedure, store only the preference sentence as memory; the
+    # workflow distiller handles the procedural part separately.
+    return re.split(r"(?<=[.!?])\s+", text.strip(), maxsplit=1)[0].strip().rstrip(".")
+
+
 def propose_memory_updates(trace: AgentTrace) -> list[Proposal]:
     proposals: list[Proposal] = []
     for message in trace.messages:
@@ -30,7 +37,7 @@ def propose_memory_updates(trace: AgentTrace) -> list[Proposal]:
         for pattern in PREFERENCE_PATTERNS:
             match = re.search(pattern, lowered, flags=re.IGNORECASE)
             if match:
-                fact = match.group("fact").strip().rstrip(".")
+                fact = _first_sentence(match.group("fact"))
                 proposals.append(
                     Proposal(
                         trace_id=trace.id,

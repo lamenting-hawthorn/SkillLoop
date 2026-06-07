@@ -1,3 +1,2 @@
-{"role":"user","content":"Remember that I prefer concise answers in terminal."}
-{"role":"user","content":"When fixing gateway issues, first check logs, then config, then restart."}
-{"role":"assistant","content":"Done — I will use that workflow next time."}
+{"role":"user","content":"Remember that I prefer concise terminal summaries. When fixing gateway issues, first check logs, then config, then restart."}
+{"role":"assistant","content":"Done. Verified with tests and saved the workflow proposal."}

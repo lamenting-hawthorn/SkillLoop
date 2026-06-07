@@ -38,13 +38,25 @@ Each line should contain a message-like object. The adapter tolerates unknown fi
 
 ## `ingest hermes`
 
-Ingests Hermes-like JSON or JSONL exports.
+Ingests Hermes-like JSON exports.
 
 ```bash
-skillloop --path . ingest hermes path/to/export.jsonl
+skillloop --path . ingest hermes path/to/export.json
 ```
 
 The adapter normalizes known message and tool-call fields into the internal schema.
+
+## `ingest hermes-db`
+
+Ingests directly from a Hermes `state.db` file using SQLite read-only mode. This reads session messages but does not mutate Hermes state.
+
+```bash
+skillloop --path . ingest hermes-db --latest
+skillloop --path . ingest hermes-db --session-id <session-id>
+skillloop --path . ingest hermes-db --db-path ~/.hermes/state.db --latest
+```
+
+By default, `--db-path` is `~/.hermes/state.db`.
 
 ## `traces list`
 
@@ -127,7 +139,10 @@ Exports supervised fine-tuning records.
 
 ```bash
 skillloop --path . export sft --out data/sft.jsonl
+skillloop --path . export sft --out data/sft.jsonl --min-score 70
 ```
+
+Use `--min-score N` to export only traces with a stored evaluation score greater than or equal to `N`. Traces without evaluations are skipped when this gate is active.
 
 Record shape:
 
@@ -141,6 +156,7 @@ Exports preference records when chosen/rejected data is available.
 
 ```bash
 skillloop --path . export dpo --out data/dpo.jsonl
+skillloop --path . export dpo --out data/dpo.jsonl --min-score 70
 ```
 
 Record shape:
@@ -160,7 +176,7 @@ python -m skillloop.cli --path "$tmp" traces list
 python -m skillloop.cli --path "$tmp" eval latest
 python -m skillloop.cli --path "$tmp" distill latest
 python -m skillloop.cli --path "$tmp" review list --verbose
-python -m skillloop.cli --path "$tmp" export sft --out "$tmp/sft.jsonl"
+python -m skillloop.cli --path "$tmp" export sft --out "$tmp/sft.jsonl" --min-score 70
 test -s "$tmp/sft.jsonl"
 rm -rf "$tmp"
 ```

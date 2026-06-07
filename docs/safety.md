@@ -7,8 +7,9 @@ SkillLoop handles agent traces, memory candidates, skill candidates, and trainin
 1. Local-first by default
 2. Review before apply
 3. No global agent mutation in v1
-4. No credential storage
-5. Generated artifacts are ignored by git
+4. Redact obvious secrets before storage/export
+5. No credential storage
+6. Generated artifacts are ignored by git
 
 ## Local state
 
@@ -47,6 +48,8 @@ This prevents accidental mutation from noisy traces, hallucinated lessons, or on
 
 ## Credentials
 
+SkillLoop redacts common secret patterns during generic/Hermes ingestion and SFT/DPO export, including obvious `sk-...` keys, bearer tokens, and `api_key`/`token`/`secret`/`password` assignments. Redaction is a safety net, not a full DLP system.
+
 The repository ignores local env and state files:
 
 ```text
@@ -69,11 +72,11 @@ Agent traces may contain private content. Before sharing datasets produced by Sk
 
 ## Known limitations
 
-The MVP has deterministic heuristics and basic secret avoidance. It is not a complete DLP system.
+The MVP has deterministic heuristics and common-pattern secret redaction. It is not a complete DLP system.
 
 Recommended future hardening:
 
-- configurable redaction before storage
+- configurable redaction policies before storage
 - allow/deny path policies for adapters
 - dataset review reports
 - PII detection
