@@ -1,0 +1,2 @@
+{"role":"user","content":"Remember that I prefer concise terminal summaries. When fixing gateway issues, first check logs, then config, then restart."}
+{"role":"assistant","content":"Done. Verified with tests and saved the workflow proposal."}
