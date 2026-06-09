@@ -21,9 +21,13 @@ The MVP is local-first, stdlib-first, and review-first.
 
 - Normalizes generic JSONL, Hermes-style exports, and Hermes `state.db` sessions
 - Stores traces, evaluations, and proposals in local SQLite
-- Scores traces with deterministic heuristics
+- Uses a versioned normalized trace schema with runtime/adapter metadata
+- Preserves raw trace inputs and records raw + normalized content hashes
+- Records span-ready tool-call metadata such as IDs, timings, exit codes, status, error type, and artifact references
+- Scores traces through a registered evaluator with versioned provenance and structured evidence
 - Detects durable user preferences, corrections, success signals, and reusable workflows
-- Creates memory and skill proposals instead of silently mutating global state
+- Creates deduplicated memory and skill proposals instead of silently mutating global state
+- Tracks proposal lifecycle from `pending` to `approved` to `applied`
 - Applies approved proposals only into the selected project directory
 - Exports SFT JSONL and DPO JSONL datasets with optional score gates
 - Redacts common secret patterns during ingestion/export
@@ -54,7 +58,7 @@ Run the sample workflow from the repository root:
 python -m skillloop.cli --path . init
 python -m skillloop.cli --path . ingest generic examples/traces/simple_trace.jsonl
 python -m skillloop.cli --path . traces list
-python -m skillloop.cli --path . eval latest
+python -m skillloop.cli --path . eval latest --evaluator rubric
 python -m skillloop.cli --path . distill latest
 python -m skillloop.cli --path . review list --verbose
 python -m skillloop.cli --path . export sft --out data/sft.jsonl --min-score 70
@@ -85,7 +89,7 @@ skillloop --path <project-root> ingest hermes-db --latest [--db-path ~/.hermes/s
 skillloop --path <project-root> ingest hermes-db --session-id <id> [--db-path ~/.hermes/state.db]
 skillloop --path <project-root> traces list
 skillloop --path <project-root> traces show <trace-id|latest>
-skillloop --path <project-root> eval <trace-id|latest>
+skillloop --path <project-root> eval <trace-id|latest> [--evaluator rubric]
 skillloop --path <project-root> distill <trace-id|latest>
 skillloop --path <project-root> review list [--verbose]
 skillloop --path <project-root> review approve <proposal-id-prefix>
@@ -100,6 +104,7 @@ skillloop --path <project-root> export dpo --out <path> [--min-score N]
 SkillLoop writes only under the selected project root by default:
 
 - local state: `.skillloop/skillloop.db`
+- preserved raw trace inputs: `.skillloop/raw_traces/*`
 - approved memory exports: `.skillloop/approved/memory/*.md`
 - approved skill exports: `.skillloop/approved/skill/*.md`
 - training data exports: user-selected paths such as `data/sft.jsonl`
@@ -113,7 +118,7 @@ skillloop/
   adapters/      Trace ingestion adapters
   apply/         Review-approved filesystem exports
   distill/       Memory and skill proposal generation
-  eval/          Trace scoring heuristics
+  eval/          Evaluator registry, deterministic rubric, and structured evidence helpers
   export/        SFT and DPO dataset exporters
   review/        Proposal review queue helpers
   cli.py         Command-line interface
@@ -130,8 +135,12 @@ docs/            Architecture and usage documentation
 SkillLoop is review-first:
 
 - Ingested traces are stored locally
+- Raw traces are preserved locally with hashes for provenance
+- Evaluations carry evaluator name, evaluator version, evidence, and trace schema version
 - Distillation creates proposals, not global mutations
+- Duplicate active proposals are skipped by content hash
 - Human approval is required before `apply`
+- Applied proposals are marked `applied` with an application timestamp
 - Approved exports stay inside `.skillloop/approved/`
 - `.env`, `.env.*`, generated datasets, and local state are gitignored
 
@@ -152,6 +161,16 @@ Expected MVP result: all tests pass and the sample workflow exports at least one
 This repository is an initial proof-of-work for the SkillLoop architecture. It already demonstrates the core loop:
 
 trace ingestion → evaluation → memory/skill proposals → human review → safe local apply → fine-tuning data export
+
+The current proof-of-work also includes the first trustworthy-data layer needed before model training becomes meaningful:
+
+- schema-versioned traces with backward compatibility for old traces
+- runtime and adapter metadata on traces
+- span-ready tool-call schema
+- raw trace preservation and content hashes
+- evaluator provenance and structured evidence
+- evaluator registry for versioned scoring strategies
+- proposal deduplication and applied lifecycle tracking
 
 See:
 

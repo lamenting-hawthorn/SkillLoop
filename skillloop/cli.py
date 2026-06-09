@@ -10,10 +10,10 @@ from skillloop.adapters.hermes import load_hermes_export, load_hermes_state_db
 from skillloop.apply.filesystem import export_approved
 from skillloop.distill.memory import propose_memory_updates
 from skillloop.distill.skills import propose_skill_updates
-from skillloop.eval.rubric import evaluate_trace
+from skillloop.eval.registry import default_evaluator_registry
 from skillloop.export.dpo import export_dpo_records
 from skillloop.export.sft import export_sft_records
-from skillloop.schema import AgentTrace
+from skillloop.schema import AgentTrace, Proposal
 from skillloop.store import SkillLoopStore
 
 
@@ -89,7 +89,8 @@ def cmd_traces_show(args: argparse.Namespace) -> int:
 def cmd_eval(args: argparse.Namespace) -> int:
     store = _store(args)
     trace = _resolve_trace(store, args.trace_id)
-    evaluation = evaluate_trace(trace)
+    registry = default_evaluator_registry()
+    evaluation = registry.evaluate(trace, name=args.evaluator)
     store.save_evaluation(evaluation)
     print(json.dumps(evaluation.to_dict(), indent=2, ensure_ascii=False))
     return 0
@@ -99,11 +100,16 @@ def cmd_distill(args: argparse.Namespace) -> int:
     store = _store(args)
     trace = _resolve_trace(store, args.trace_id)
     proposals = propose_memory_updates(trace) + propose_skill_updates(trace)
+    saved: list[tuple[Proposal, str, bool]] = []
     for proposal in proposals:
-        store.save_proposal(proposal)
-    print(f"Created {len(proposals)} proposal(s)")
-    for proposal in proposals:
-        print(f"{proposal.id[:12]}\t{proposal.kind}\t{proposal.title}")
+        saved_id = store.save_proposal(proposal)
+        saved.append((proposal, saved_id, saved_id == proposal.id))
+    created = [proposal for proposal, _, is_new in saved if is_new]
+    duplicates = [saved_id for _, saved_id, is_new in saved if not is_new]
+    print(f"Created {len(created)} proposal(s); skipped {len(duplicates)} duplicate(s)")
+    for proposal, saved_id, is_new in saved:
+        marker = "new" if is_new else "duplicate"
+        print(f"{saved_id[:12]}\t{marker}\t{proposal.kind}\t{proposal.title}")
     return 0
 
 
@@ -210,6 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_eval = sub.add_parser("eval", help="Evaluate a trace")
     p_eval.add_argument("trace_id", help="Trace id/prefix, or latest")
+    p_eval.add_argument("--evaluator", default="rubric", help="Registered evaluator name (default: rubric)")
     p_eval.set_defaults(func=cmd_eval)
 
     p_distill = sub.add_parser("distill", help="Create memory/skill proposals from a trace")

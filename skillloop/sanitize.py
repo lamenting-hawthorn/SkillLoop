@@ -16,3 +16,16 @@ def redact_secrets(text: str) -> str:
     for pattern in _SECRET_PATTERNS:
         redacted = pattern.sub(REDACTION, redacted)
     return redacted
+
+
+def redact_data(value):
+    """Recursively redact secrets from JSON-like data without changing shape."""
+    if isinstance(value, str):
+        return redact_secrets(value)
+    if isinstance(value, dict):
+        return {str(k): redact_data(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact_data(item) for item in value]
+    if isinstance(value, tuple):
+        return [redact_data(item) for item in value]
+    return value

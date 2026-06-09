@@ -51,6 +51,7 @@ Confirm the workflow produced the requested result and record the concrete outpu
                 title=title,
                 content=content,
                 reason="User described a conditional procedure that can become procedural memory.",
+                source_trace_schema_version=trace.schema_version,
             )
         )
     return proposals
