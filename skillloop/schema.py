@@ -224,6 +224,20 @@ class Evaluation:
     notes: list[str] = field(default_factory=list)
     id: str = field(default_factory=lambda: uuid4().hex)
     created_at: str = field(default_factory=now_iso)
+    evaluator_name: str = "rubric"
+    evaluator_version: str = "1.0"
+    evidence: list[dict[str, Any]] = field(default_factory=list)
+    created_from_trace_schema_version: str = "1.0"
+
+    def __post_init__(self) -> None:
+        self.trace_id = str(self.trace_id)
+        self.score = int(self.score)
+        self.tags = [str(tag) for tag in self.tags]
+        self.notes = [str(note) for note in self.notes]
+        self.evaluator_name = str(self.evaluator_name or "unknown")
+        self.evaluator_version = str(self.evaluator_version or "0")
+        self.evidence = [redact_data(dict(item or {})) for item in self.evidence]
+        self.created_from_trace_schema_version = str(self.created_from_trace_schema_version or "1.0")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -233,7 +247,26 @@ class Evaluation:
             "tags": self.tags,
             "notes": self.notes,
             "created_at": self.created_at,
+            "evaluator_name": self.evaluator_name,
+            "evaluator_version": self.evaluator_version,
+            "evidence": self.evidence,
+            "created_from_trace_schema_version": self.created_from_trace_schema_version,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Evaluation":
+        return cls(
+            id=str(data.get("id") or uuid4().hex),
+            trace_id=str(data.get("trace_id") or ""),
+            score=int(data.get("score") or 0),
+            tags=[str(tag) for tag in data.get("tags", [])],
+            notes=[str(note) for note in data.get("notes", [])],
+            created_at=str(data.get("created_at") or now_iso()),
+            evaluator_name=str(data.get("evaluator_name") or "rubric"),
+            evaluator_version=str(data.get("evaluator_version") or "1.0"),
+            evidence=[dict(item or {}) for item in data.get("evidence", [])],
+            created_from_trace_schema_version=str(data.get("created_from_trace_schema_version") or "1.0"),
+        )
 
 
 @dataclass

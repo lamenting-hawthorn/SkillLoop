@@ -98,7 +98,7 @@ class SkillLoopStore:
         with self._connect() as conn:
             rows = conn.execute(query, args).fetchall()
         payloads = [json.loads(row[0]) for row in rows]
-        return [Evaluation(trace_id=p["trace_id"], score=p["score"], tags=p.get("tags", []), notes=p.get("notes", []), id=p["id"], created_at=p["created_at"]) for p in payloads]
+        return [Evaluation.from_dict(p) for p in payloads]
 
     def save_proposal(self, proposal: Proposal) -> str:
         self.init()
