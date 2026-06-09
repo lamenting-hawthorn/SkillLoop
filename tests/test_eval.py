@@ -51,6 +51,8 @@ def test_evaluation_penalizes_failed_tools_even_when_assistant_claims_done():
     assert "tool_failure" in evaluation.tags
     assert evaluation.score < 70
     assert any(item["kind"] == "tool_failure" for item in evaluation.evidence)
+    assert any(item["kind"] == "command_execution" for item in evaluation.evidence)
+    assert any(item["kind"] == "test_execution" for item in evaluation.evidence)
 
 
 def test_evaluation_ignores_user_claim_as_success_evidence():
@@ -81,3 +83,23 @@ def test_evaluation_provenance_round_trip():
     assert restored.evaluator_version == evaluation.evaluator_version
     assert restored.created_from_trace_schema_version == "1.1"
     assert restored.evidence == evaluation.evidence
+
+
+def test_evaluation_records_file_artifact_and_user_feedback_evidence():
+    trace = AgentTrace(
+        source="test",
+        messages=[
+            AgentMessage(role="user", content="No, that's wrong. Remember I prefer concise answers."),
+            AgentMessage(
+                role="assistant",
+                content="Updated file.",
+                tool_calls=[ToolCall(name="write_file", success=True, artifact_refs=["out.md"])],
+            ),
+        ],
+    )
+
+    evaluation = evaluate_trace(trace)
+
+    assert any(item["kind"] == "file_artifact" for item in evaluation.evidence)
+    assert any(item["kind"] == "user_feedback" and item["subtype"] == "correction" for item in evaluation.evidence)
+    assert any(item["kind"] == "user_feedback" and item["subtype"] == "learning_signal" for item in evaluation.evidence)

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from skillloop.eval.evidence import command_execution_evidence, file_artifact_evidence, test_execution_evidence, user_feedback_evidence
 from skillloop.schema import AgentTrace, Evaluation, ToolCall
 
 EVALUATOR_NAME = "rubric"
-EVALUATOR_VERSION = "1.1"
+EVALUATOR_VERSION = "1.2"
 
 CORRECTION_WORDS = ("wrong", "incorrect", "no,", "actually", "don't", "do not")
 LEARNING_WORDS = ("remember", "i prefer", "always", "never")
@@ -93,6 +94,22 @@ def evaluate_trace(trace: AgentTrace) -> Evaluation:
         tags.append("tool_success_unknown")
         notes.append(f"Trace has {len(unknown_tools)} tool call(s) without success metadata.")
         evidence.append(_evidence("tool_success_unknown", count=len(unknown_tools), tool_call_ids=[call.id for call in unknown_tools]))
+
+    structured_evidence = (
+        command_execution_evidence(calls)
+        + test_execution_evidence(calls)
+        + file_artifact_evidence(calls)
+        + user_feedback_evidence(trace.messages, CORRECTION_WORDS, LEARNING_WORDS)
+    )
+    evidence.extend(structured_evidence)
+    if any(item["kind"] == "command_execution" for item in structured_evidence):
+        tags.append("command_evidence")
+    if any(item["kind"] == "test_execution" for item in structured_evidence):
+        tags.append("test_evidence")
+    if any(item["kind"] == "file_artifact" for item in structured_evidence):
+        tags.append("file_artifact_evidence")
+    if any(item["kind"] == "user_feedback" for item in structured_evidence):
+        tags.append("user_feedback_evidence")
 
     if _contains_any(evidence_text, SUCCESS_WORDS):
         tags.append("success_signal")
