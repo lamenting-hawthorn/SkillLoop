@@ -30,6 +30,7 @@ The MVP is local-first, stdlib-first, and review-first.
 - Tracks proposal lifecycle from `pending` to `approved` to `applied`
 - Applies approved proposals only into the selected project directory
 - Exports SFT JSONL and DPO JSONL datasets with optional score gates, split files, manifests, provenance, and count/token stats
+- Replays traces through evaluator versions to benchmark score/evidence changes before training
 - Redacts common secret patterns during ingestion/export
 
 ## What SkillLoop does not do in v1
@@ -97,6 +98,7 @@ skillloop --path <project-root> review reject <proposal-id-prefix>
 skillloop --path <project-root> apply
 skillloop --path <project-root> export sft --out <path> [--min-score N] [--splits train=0.8,validation=0.1,test=0.1] [--manifest-out manifest.json]
 skillloop --path <project-root> export dpo --out <path> [--min-score N] [--splits train=0.8,validation=0.1,test=0.1] [--manifest-out manifest.json]
+skillloop --path <project-root> benchmark [--baseline rubric_legacy] [--candidates rubric] [--out benchmark.json]
 ```
 
 ## Clean export boundary
@@ -175,6 +177,7 @@ The current proof-of-work also includes the first trustworthy-data layer needed 
 - evaluator registry for versioned scoring strategies
 - proposal deduplication and applied lifecycle tracking
 - dataset manifests, split exports, export metadata, provenance summaries, and deterministic token/count stats
+- replay benchmark reports that compare evaluator versions before training
 
 See:
 

@@ -45,9 +45,20 @@ class EvaluatorRegistry:
 
 
 def default_evaluator_registry() -> EvaluatorRegistry:
+    from skillloop.eval.legacy import EVALUATOR_NAME as LEGACY_NAME
+    from skillloop.eval.legacy import EVALUATOR_VERSION as LEGACY_VERSION
+    from skillloop.eval.legacy import evaluate_trace as evaluate_legacy_trace
     from skillloop.eval.rubric import EVALUATOR_NAME, EVALUATOR_VERSION, evaluate_trace
 
     registry = EvaluatorRegistry()
+    registry.register(
+        RegisteredEvaluator(
+            name=LEGACY_NAME,
+            version=LEGACY_VERSION,
+            evaluate=evaluate_legacy_trace,
+            description="Legacy lexical rubric used only for replay/benchmark comparisons.",
+        )
+    )
     registry.register(
         RegisteredEvaluator(
             name=EVALUATOR_NAME,

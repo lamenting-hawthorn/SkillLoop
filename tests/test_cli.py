@@ -107,3 +107,24 @@ def test_cli_export_writes_split_files_and_manifest(tmp_path):
     assert (tmp_path / "data" / "sft.train.jsonl").exists()
     assert (tmp_path / "data" / "sft.validation.jsonl").exists()
     assert (tmp_path / "data" / "sft.test.jsonl").exists()
+
+
+def test_cli_benchmark_writes_report(tmp_path):
+    trace_path = tmp_path / "trace.jsonl"
+    trace_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"role": "user", "content": "run tests"}),
+                json.dumps({"role": "assistant", "content": "Done. Tests passed."}),
+            ]
+        )
+    )
+    report_path = tmp_path / "benchmark.json"
+
+    assert main(["--path", str(tmp_path), "ingest", "generic", str(trace_path)]) == 0
+    assert main(["--path", str(tmp_path), "benchmark", "--out", str(report_path)]) == 0
+
+    report = json.loads(report_path.read_text())
+    assert report["summary"]["traces"] == 1
+    assert report["baseline"] == "rubric_legacy"
+    assert report["candidates"] == ["rubric"]

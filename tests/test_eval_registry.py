@@ -5,7 +5,7 @@ from skillloop.schema import AgentMessage, AgentTrace, Evaluation
 def test_default_registry_exposes_rubric():
     registry = default_evaluator_registry()
 
-    assert registry.names() == ["rubric"]
+    assert registry.names() == ["rubric", "rubric_legacy"]
 
 
 def test_registry_evaluates_trace():

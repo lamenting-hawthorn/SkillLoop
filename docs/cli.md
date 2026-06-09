@@ -173,6 +173,22 @@ Record shape:
 {"prompt": "...", "chosen": "...", "rejected": "...", "metadata": {"trace_id": "...", "evaluation_id": "..."}}
 ```
 
+## `benchmark`
+
+Replays stored traces through evaluator versions and writes a report that compares scores, deltas, tags, and evidence counts. Use this before training to prove an evaluator change is at least non-regressing on a small trace suite.
+
+```bash
+skillloop --path . benchmark
+skillloop --path . benchmark --baseline rubric_legacy --candidates rubric --out data/benchmark.json
+skillloop --path . benchmark --trace-id latest --out data/latest-benchmark.json
+```
+
+Report shape:
+
+```json
+{"baseline":"rubric_legacy","candidates":["rubric"],"summary":{"traces":1,"average_delta":{"rubric":0}},"cases":[{"trace_id":"...","scores":{"rubric_legacy":70,"rubric":75}}]}
+```
+
 ## Full smoke test
 
 ```bash
@@ -185,7 +201,9 @@ python -m skillloop.cli --path "$tmp" eval latest
 python -m skillloop.cli --path "$tmp" distill latest
 python -m skillloop.cli --path "$tmp" review list --verbose
 python -m skillloop.cli --path "$tmp" export sft --out "$tmp/sft.jsonl" --min-score 70
+python -m skillloop.cli --path "$tmp" benchmark --out "$tmp/benchmark.json"
 test -s "$tmp/sft.jsonl"
 test -s "$tmp/sft.jsonl.manifest.json"
+test -s "$tmp/benchmark.json"
 echo "$tmp"
 ```

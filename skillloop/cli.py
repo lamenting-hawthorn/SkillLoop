@@ -8,6 +8,7 @@ from pathlib import Path
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
 from skillloop.adapters.hermes import load_hermes_export, load_hermes_state_db
 from skillloop.apply.filesystem import export_approved
+from skillloop.benchmark import replay_benchmark, write_benchmark_report
 from skillloop.dataset import build_manifest, parse_split_spec, split_records, write_jsonl, write_manifest
 from skillloop.distill.memory import propose_memory_updates
 from skillloop.distill.skills import propose_skill_updates
@@ -234,6 +235,21 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    store = _store(args)
+    traces = store.list_traces()
+    if args.trace_id:
+        traces = [_resolve_trace(store, args.trace_id)]
+    registry = default_evaluator_registry()
+    candidates = [item.strip() for item in args.candidates.split(",") if item.strip()]
+    report = replay_benchmark(traces, registry, baseline=args.baseline, candidates=candidates)
+    if args.out:
+        out = write_benchmark_report(args.out, report)
+        print(f"Wrote benchmark report to {out}")
+    print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SkillLoop: clean learning/export layer for agent traces")
     parser.add_argument("--path", default=".", help="Project root for .skillloop state (default: current directory)")
@@ -293,6 +309,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_export.add_argument("--trace-id", default=None, help="Optional trace id/prefix, or latest")
     p_export.add_argument("--min-score", type=int, default=None, help="Only export traces with an evaluation score >= this value")
     p_export.set_defaults(func=cmd_export)
+
+    p_benchmark = sub.add_parser("benchmark", help="Replay traces through evaluator versions and compare scores")
+    p_benchmark.add_argument("--baseline", default="rubric_legacy", help="Baseline evaluator name (default: rubric_legacy)")
+    p_benchmark.add_argument("--candidates", default="rubric", help="Comma-separated candidate evaluator names (default: rubric)")
+    p_benchmark.add_argument("--trace-id", default=None, help="Optional trace id/prefix, or latest")
+    p_benchmark.add_argument("--out", default=None, help="Optional JSON report path")
+    p_benchmark.set_defaults(func=cmd_benchmark)
 
     return parser
 
