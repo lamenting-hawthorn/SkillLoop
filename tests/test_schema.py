@@ -1,4 +1,4 @@
-from skillloop.schema import AgentMessage, AgentTrace, ToolCall, TRACE_SCHEMA_VERSION
+from skillloop.schema import AgentMessage, AgentTrace, Proposal, ToolCall, TRACE_SCHEMA_VERSION
 
 
 def test_trace_round_trip_preserves_messages():
@@ -98,3 +98,25 @@ def test_span_ready_tool_call_round_trip():
     assert restored.exit_code == 1
     assert restored.error_type == "CommandFailed"
     assert restored.artifact_refs == [".skillloop/artifacts/test.log"]
+
+
+def test_old_proposal_without_lifecycle_metadata_still_loads():
+    proposal = Proposal.from_dict(
+        {
+            "id": "p1",
+            "trace_id": "t1",
+            "kind": "memory",
+            "title": "t",
+            "content": "User prefers concise answers",
+            "reason": "r",
+            "status": "pending",
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }
+    )
+
+    assert proposal.content_hash
+    assert proposal.applied_at is None
+    assert proposal.source_trace_schema_version == "1.0"
+    proposal.mark_applied()
+    assert proposal.status == "applied"
+    assert proposal.applied_at is not None

@@ -13,7 +13,7 @@ from skillloop.distill.skills import propose_skill_updates
 from skillloop.eval.registry import default_evaluator_registry
 from skillloop.export.dpo import export_dpo_records
 from skillloop.export.sft import export_sft_records
-from skillloop.schema import AgentTrace
+from skillloop.schema import AgentTrace, Proposal
 from skillloop.store import SkillLoopStore
 
 
@@ -100,11 +100,16 @@ def cmd_distill(args: argparse.Namespace) -> int:
     store = _store(args)
     trace = _resolve_trace(store, args.trace_id)
     proposals = propose_memory_updates(trace) + propose_skill_updates(trace)
+    saved: list[tuple[Proposal, str, bool]] = []
     for proposal in proposals:
-        store.save_proposal(proposal)
-    print(f"Created {len(proposals)} proposal(s)")
-    for proposal in proposals:
-        print(f"{proposal.id[:12]}\t{proposal.kind}\t{proposal.title}")
+        saved_id = store.save_proposal(proposal)
+        saved.append((proposal, saved_id, saved_id == proposal.id))
+    created = [proposal for proposal, _, is_new in saved if is_new]
+    duplicates = [saved_id for _, saved_id, is_new in saved if not is_new]
+    print(f"Created {len(created)} proposal(s); skipped {len(duplicates)} duplicate(s)")
+    for proposal, saved_id, is_new in saved:
+        marker = "new" if is_new else "duplicate"
+        print(f"{saved_id[:12]}\t{marker}\t{proposal.kind}\t{proposal.title}")
     return 0
 
 

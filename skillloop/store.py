@@ -131,8 +131,20 @@ class SkillLoopStore:
         evaluations = self.list_evaluations(trace_id)
         return evaluations[0] if evaluations else None
 
+    def find_duplicate_proposal(self, proposal: Proposal) -> Proposal | None:
+        active_statuses = {"pending", "approved", "applied"}
+        for existing in self.list_proposals(status=None):
+            if existing.id == proposal.id:
+                continue
+            if existing.kind == proposal.kind and existing.content_hash == proposal.content_hash and existing.status in active_statuses:
+                return existing
+        return None
+
     def save_proposal(self, proposal: Proposal) -> str:
         self.init()
+        duplicate = self.find_duplicate_proposal(proposal)
+        if duplicate is not None and duplicate.id != proposal.id:
+            return duplicate.id
         payload = json.dumps(proposal.to_dict(), ensure_ascii=False)
         with self._connect() as conn:
             conn.execute(

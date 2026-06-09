@@ -279,6 +279,24 @@ class Proposal:
     id: str = field(default_factory=lambda: uuid4().hex)
     status: str = "pending"
     created_at: str = field(default_factory=now_iso)
+    content_hash: str | None = None
+    applied_at: str | None = None
+    source_trace_schema_version: str = "1.0"
+    source_evaluation_id: str | None = None
+
+    def __post_init__(self) -> None:
+        self.content = str(self.content or "")
+        self.content_hash = str(self.content_hash or sha256_text(stable_json_dumps({"kind": self.kind, "content": self.content})))
+        self.status = str(self.status or "pending")
+        if self.status not in PROPOSAL_STATUSES:
+            self.status = "pending"
+        self.applied_at = str(self.applied_at) if self.applied_at is not None else None
+        self.source_trace_schema_version = str(self.source_trace_schema_version or "1.0")
+        self.source_evaluation_id = str(self.source_evaluation_id) if self.source_evaluation_id is not None else None
+
+    def mark_applied(self) -> None:
+        self.status = "applied"
+        self.applied_at = now_iso()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -290,6 +308,10 @@ class Proposal:
             "reason": self.reason,
             "status": self.status,
             "created_at": self.created_at,
+            "content_hash": self.content_hash,
+            "applied_at": self.applied_at,
+            "source_trace_schema_version": self.source_trace_schema_version,
+            "source_evaluation_id": self.source_evaluation_id,
         }
 
     @classmethod
@@ -303,4 +325,8 @@ class Proposal:
             reason=str(data.get("reason") or ""),
             status=str(data.get("status") or "pending"),
             created_at=str(data.get("created_at") or now_iso()),
+            content_hash=data.get("content_hash"),
+            applied_at=data.get("applied_at"),
+            source_trace_schema_version=str(data.get("source_trace_schema_version") or "1.0"),
+            source_evaluation_id=data.get("source_evaluation_id"),
         )

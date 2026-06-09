@@ -45,6 +45,7 @@ def propose_memory_updates(trace: AgentTrace) -> list[Proposal]:
                         title="Durable user/environment memory candidate",
                         content=fact,
                         reason="User phrased this as a durable preference, rule, or remembered fact.",
+                        source_trace_schema_version=trace.schema_version,
                     )
                 )
                 break

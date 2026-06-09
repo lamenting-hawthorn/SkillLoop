@@ -12,6 +12,8 @@ def list_pending(store: SkillLoopStore) -> list[Proposal]:
 
 def approve_proposal(store: SkillLoopStore, proposal_id: str) -> Proposal:
     proposal = store.get_proposal(proposal_id)
+    if proposal.status == "applied":
+        return proposal
     proposal.status = "approved"
     store.save_proposal(proposal)
     return proposal
@@ -46,5 +48,7 @@ def write_approved_files(store: SkillLoopStore, out_dir: str | Path | None = Non
         suffix = ".md" if proposal.kind in {"memory", "skill"} else ".txt"
         path = kind_dir / f"{proposal.id}{suffix}"
         path.write_text(proposal.content, encoding="utf-8")
+        proposal.mark_applied()
+        store.save_proposal(proposal)
         written.append(path)
     return written
