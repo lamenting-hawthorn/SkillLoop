@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import shutil
 from pathlib import Path
 
-from skillloop.schema import AgentTrace, Evaluation, Proposal
+from skillloop.schema import AgentTrace, Evaluation, Proposal, sha256_text
 
 
 class SkillLoopStore:
@@ -12,6 +13,7 @@ class SkillLoopStore:
         self.root = Path(root).resolve()
         self.state_dir = self.root / ".skillloop"
         self.db_path = self.state_dir / "skillloop.db"
+        self.raw_trace_dir = self.state_dir / "raw_traces"
 
     def init(self) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True)
@@ -55,6 +57,8 @@ class SkillLoopStore:
 
     def save_trace(self, trace: AgentTrace) -> str:
         self.init()
+        self._preserve_raw_trace(trace)
+        trace.normalized_trace_sha256 = trace.compute_normalized_sha256()
         payload = json.dumps(trace.to_dict(), ensure_ascii=False)
         with self._connect() as conn:
             conn.execute(
@@ -62,6 +66,29 @@ class SkillLoopStore:
                 (trace.id, trace.source, trace.created_at, payload),
             )
         return trace.id
+
+    def _preserve_raw_trace(self, trace: AgentTrace) -> None:
+        if not trace.raw_artifact_ref:
+            return
+        raw_path = Path(trace.raw_artifact_ref).expanduser()
+        if not raw_path.exists() or not raw_path.is_file():
+            return
+        raw_bytes = raw_path.read_bytes()
+        trace.raw_trace_sha256 = trace.raw_trace_sha256 or sha256_text(raw_bytes.decode("utf-8", errors="replace"))
+        self.raw_trace_dir.mkdir(parents=True, exist_ok=True)
+        suffix = raw_path.suffix or ".raw"
+        preserved = self.raw_trace_dir / f"{trace.id}{suffix}"
+        if raw_path.resolve() != preserved.resolve():
+            shutil.copyfile(raw_path, preserved)
+        trace.raw_artifact_ref = str(preserved.relative_to(self.root))
+
+    def read_preserved_raw_trace(self, trace: AgentTrace | str) -> str:
+        trace_obj = self.get_trace(trace) if isinstance(trace, str) else trace
+        if not trace_obj.raw_artifact_ref:
+            raise FileNotFoundError(f"trace has no preserved raw artifact: {trace_obj.id}")
+        raw_path = (self.root / trace_obj.raw_artifact_ref).resolve()
+        raw_path.relative_to(self.root)
+        return raw_path.read_text(encoding="utf-8")
 
     def get_trace(self, trace_id: str) -> AgentTrace:
         self.init()
@@ -99,6 +126,10 @@ class SkillLoopStore:
             rows = conn.execute(query, args).fetchall()
         payloads = [json.loads(row[0]) for row in rows]
         return [Evaluation.from_dict(p) for p in payloads]
+
+    def latest_evaluation(self, trace_id: str) -> Evaluation | None:
+        evaluations = self.list_evaluations(trace_id)
+        return evaluations[0] if evaluations else None
 
     def save_proposal(self, proposal: Proposal) -> str:
         self.init()
