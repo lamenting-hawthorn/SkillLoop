@@ -189,6 +189,25 @@ Report shape:
 {"baseline":"rubric_legacy","candidates":["rubric"],"summary":{"traces":1,"average_delta":{"rubric":0}},"cases":[{"trace_id":"...","scores":{"rubric_legacy":70,"rubric":75}}]}
 ```
 
+## `training-config`
+
+Generates training configuration artifacts for Unsloth, TRL, or Axolotl from a dataset manifest. This command does not run training. Generated files include explicit safety metadata showing `training_auto_run: false` / `training_auto_run=false` equivalent fields.
+
+```bash
+skillloop --path . training-config trl --dataset-manifest data/sft.jsonl.manifest.json --base-model NousResearch/Meta-Llama-3.1-8B --output-dir runs/trl-sft --config-dir configs/trl
+skillloop --path . training-config unsloth --dataset-manifest data/sft.jsonl.manifest.json --base-model unsloth/llama-3-8b --output-dir runs/unsloth-sft --config-dir configs/unsloth
+skillloop --path . training-config axolotl --dataset-manifest data/sft.jsonl.manifest.json --base-model NousResearch/Meta-Llama-3.1-8B --output-dir runs/axolotl-sft --config-dir configs/axolotl
+```
+
+Generated files:
+
+```text
+configs/trl/trl_sft_config.json
+configs/unsloth/unsloth_config.json
+configs/unsloth/unsloth_sft_skeleton.py
+configs/axolotl/axolotl_config.yml
+```
+
 ## Full smoke test
 
 ```bash

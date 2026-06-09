@@ -17,6 +17,7 @@ from skillloop.export.dpo import export_dpo_records
 from skillloop.export.sft import export_sft_records
 from skillloop.schema import AgentTrace, Evaluation, Proposal
 from skillloop.store import SkillLoopStore
+from skillloop.training_config import TrainingConfigRequest, generate_training_config
 
 
 def _store(args: argparse.Namespace) -> SkillLoopStore:
@@ -250,6 +251,26 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_training_config(args: argparse.Namespace) -> int:
+    request = TrainingConfigRequest(
+        target=args.target,
+        dataset_manifest=args.dataset_manifest,
+        base_model=args.base_model,
+        output_dir=args.output_dir,
+        config_dir=args.config_dir,
+        learning_rate=args.learning_rate,
+        epochs=args.epochs,
+        per_device_batch_size=args.per_device_batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        max_seq_length=args.max_seq_length,
+        lora_rank=args.lora_rank,
+        lora_alpha=args.lora_alpha,
+    )
+    summary = generate_training_config(request)
+    print(json.dumps(summary, indent=2, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SkillLoop: clean learning/export layer for agent traces")
     parser.add_argument("--path", default=".", help="Project root for .skillloop state (default: current directory)")
@@ -316,6 +337,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_benchmark.add_argument("--trace-id", default=None, help="Optional trace id/prefix, or latest")
     p_benchmark.add_argument("--out", default=None, help="Optional JSON report path")
     p_benchmark.set_defaults(func=cmd_benchmark)
+
+    p_training = sub.add_parser("training-config", help="Generate training configs only; does not run training")
+    p_training.add_argument("target", choices=["unsloth", "trl", "axolotl"])
+    p_training.add_argument("--dataset-manifest", required=True)
+    p_training.add_argument("--base-model", required=True)
+    p_training.add_argument("--output-dir", required=True)
+    p_training.add_argument("--config-dir", required=True)
+    p_training.add_argument("--learning-rate", type=float, default=2e-4)
+    p_training.add_argument("--epochs", type=int, default=1)
+    p_training.add_argument("--per-device-batch-size", type=int, default=1)
+    p_training.add_argument("--gradient-accumulation-steps", type=int, default=4)
+    p_training.add_argument("--max-seq-length", type=int, default=2048)
+    p_training.add_argument("--lora-rank", type=int, default=16)
+    p_training.add_argument("--lora-alpha", type=int, default=16)
+    p_training.set_defaults(func=cmd_training_config)
 
     return parser
 

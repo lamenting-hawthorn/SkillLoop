@@ -31,6 +31,7 @@ The MVP is local-first, stdlib-first, and review-first.
 - Applies approved proposals only into the selected project directory
 - Exports SFT JSONL and DPO JSONL datasets with optional score gates, split files, manifests, provenance, and count/token stats
 - Replays traces through evaluator versions to benchmark score/evidence changes before training
+- Generates reviewed training config artifacts for Unsloth, TRL, and Axolotl without running training
 - Redacts common secret patterns during ingestion/export
 
 ## What SkillLoop does not do in v1
@@ -99,6 +100,7 @@ skillloop --path <project-root> apply
 skillloop --path <project-root> export sft --out <path> [--min-score N] [--splits train=0.8,validation=0.1,test=0.1] [--manifest-out manifest.json]
 skillloop --path <project-root> export dpo --out <path> [--min-score N] [--splits train=0.8,validation=0.1,test=0.1] [--manifest-out manifest.json]
 skillloop --path <project-root> benchmark [--baseline rubric_legacy] [--candidates rubric] [--out benchmark.json]
+skillloop --path <project-root> training-config trl|unsloth|axolotl --dataset-manifest manifest.json --base-model <model> --output-dir <dir> --config-dir <dir>
 ```
 
 ## Clean export boundary
@@ -128,6 +130,7 @@ skillloop/
   cli.py         Command-line interface
   schema.py      Normalized trace/eval/proposal dataclasses
   store.py       SQLite persistence layer
+  training_config.py  Unsloth/TRL/Axolotl config generation only
 examples/
   traces/        Sample input traces
 tests/           Pytest coverage for the MVP
@@ -178,6 +181,7 @@ The current proof-of-work also includes the first trustworthy-data layer needed 
 - proposal deduplication and applied lifecycle tracking
 - dataset manifests, split exports, export metadata, provenance summaries, and deterministic token/count stats
 - replay benchmark reports that compare evaluator versions before training
+- Unsloth, TRL, and Axolotl config generation with explicit no-auto-training safety flags
 
 See:
 

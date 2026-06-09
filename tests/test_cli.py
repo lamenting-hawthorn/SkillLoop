@@ -128,3 +128,23 @@ def test_cli_benchmark_writes_report(tmp_path):
     assert report["summary"]["traces"] == 1
     assert report["baseline"] == "rubric_legacy"
     assert report["candidates"] == ["rubric"]
+
+
+def test_cli_training_config_generates_files_without_running_training(tmp_path):
+    train = tmp_path / "sft.train.jsonl"
+    train.write_text('{"messages":[]}\n')
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"id": "m1", "kind": "sft", "records": 1, "estimated_tokens": 4, "output_files": {"train": str(train)}}))
+    config_dir = tmp_path / "configs"
+
+    assert main([
+        "--path", str(tmp_path), "training-config", "trl",
+        "--dataset-manifest", str(manifest),
+        "--base-model", "NousResearch/Test",
+        "--output-dir", str(tmp_path / "out"),
+        "--config-dir", str(config_dir),
+    ]) == 0
+
+    payload = json.loads((config_dir / "trl_sft_config.json").read_text())
+    assert payload["safety"]["training_auto_run"] is False
+    assert payload["safety"]["execution"] == "config_generation_only"
