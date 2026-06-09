@@ -8,12 +8,13 @@ from pathlib import Path
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
 from skillloop.adapters.hermes import load_hermes_export, load_hermes_state_db
 from skillloop.apply.filesystem import export_approved
+from skillloop.dataset import build_manifest, parse_split_spec, split_records, write_jsonl, write_manifest
 from skillloop.distill.memory import propose_memory_updates
 from skillloop.distill.skills import propose_skill_updates
 from skillloop.eval.registry import default_evaluator_registry
 from skillloop.export.dpo import export_dpo_records
 from skillloop.export.sft import export_sft_records
-from skillloop.schema import AgentTrace, Proposal
+from skillloop.schema import AgentTrace, Evaluation, Proposal
 from skillloop.store import SkillLoopStore
 
 
@@ -166,6 +167,24 @@ def cmd_apply(args: argparse.Namespace) -> int:
     return 0
 
 
+def _evaluations_by_trace(store: SkillLoopStore, traces: list[AgentTrace]) -> dict[str, Evaluation]:
+    result: dict[str, Evaluation] = {}
+    for trace in traces:
+        latest = store.latest_evaluation(trace.id)
+        if latest is not None:
+            result[trace.id] = latest
+    return result
+
+
+def _proposals_by_trace(store: SkillLoopStore, traces: list[AgentTrace]) -> dict[str, list[Proposal]]:
+    wanted = {trace.id for trace in traces}
+    result = {trace.id: [] for trace in traces}
+    for proposal in store.list_proposals(status=None):
+        if proposal.trace_id in wanted:
+            result[proposal.trace_id].append(proposal)
+    return result
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     store = _store(args)
     traces = store.list_traces()
@@ -179,14 +198,39 @@ def cmd_export(args: argparse.Namespace) -> int:
             if best_score is not None and best_score >= args.min_score:
                 filtered.append(trace)
         traces = filtered
+    evaluations_by_trace = _evaluations_by_trace(store, traces)
+    proposals_by_trace = _proposals_by_trace(store, traces)
     if args.format == "sft":
-        records = export_sft_records(traces)
+        records = export_sft_records(traces, evaluations_by_trace=evaluations_by_trace, proposals_by_trace=proposals_by_trace)
     elif args.format == "dpo":
-        records = export_dpo_records(traces)
+        records = export_dpo_records(traces, evaluations_by_trace=evaluations_by_trace, proposals_by_trace=proposals_by_trace)
     else:
         raise SystemExit(f"Unsupported export format: {args.format}")
-    out = _write_jsonl(args.out, records)
-    print(f"Exported {len(records)} {args.format.upper()} record(s) to {out}")
+
+    split_spec = parse_split_spec(args.splits)
+    split_map = split_records(records, split_spec)
+    output_files: dict[str, Path] = {}
+    out = Path(args.out).resolve()
+    if len(split_map) == 1 and "train" in split_map:
+        output_files["train"] = write_jsonl(out, split_map["train"])
+    else:
+        for split_name, split_items in split_map.items():
+            split_path = out.with_name(f"{out.stem}.{split_name}{out.suffix or '.jsonl'}")
+            output_files[split_name] = write_jsonl(split_path, split_items)
+
+    manifest = build_manifest(
+        kind=args.format,
+        split_outputs=output_files,
+        split_records_map=split_map,
+        source_traces=traces,
+        evaluations_by_trace=evaluations_by_trace,
+        proposals_by_trace=proposals_by_trace,
+        export_metadata={"min_score": args.min_score, "split_spec": args.splits or "train=1.0"},
+    )
+    manifest_path = Path(args.manifest_out).resolve() if args.manifest_out else out.with_suffix(out.suffix + ".manifest.json")
+    write_manifest(manifest_path, manifest)
+    print(f"Exported {len(records)} {args.format.upper()} record(s) to {', '.join(str(path) for path in output_files.values())}")
+    print(f"Wrote manifest to {manifest_path}")
     return 0
 
 
@@ -244,6 +288,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_export = sub.add_parser("export", help="Export fine-tuning-ready JSONL")
     p_export.add_argument("format", choices=["sft", "dpo"])
     p_export.add_argument("--out", required=True)
+    p_export.add_argument("--manifest-out", default=None, help="Optional manifest JSON path (default: <out>.manifest.json)")
+    p_export.add_argument("--splits", default=None, help="Optional split ratios, e.g. train=0.8,validation=0.1,test=0.1")
     p_export.add_argument("--trace-id", default=None, help="Optional trace id/prefix, or latest")
     p_export.add_argument("--min-score", type=int, default=None, help="Only export traces with an evaluation score >= this value")
     p_export.set_defaults(func=cmd_export)

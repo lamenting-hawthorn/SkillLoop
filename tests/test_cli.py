@@ -27,7 +27,13 @@ def test_cli_ingest_eval_distill_export_flow(tmp_path, capsys):
 
     lines = out_path.read_text().splitlines()
     assert len(lines) == 1
-    assert json.loads(lines[0])["messages"][0]["role"] == "user"
+    record = json.loads(lines[0])
+    assert record["messages"][0]["role"] == "user"
+    assert record["metadata"]["trace_id"]
+    manifest = json.loads((tmp_path / "data" / "sft.jsonl.manifest.json").read_text())
+    assert manifest["records"] == 1
+    assert manifest["splits"]["train"]["records"] == 1
+    assert manifest["provenance"]["trace_ids"] == [record["metadata"]["trace_id"]]
     output = capsys.readouterr().out
     assert "Ingested" in output
     assert "Created" in output
@@ -68,3 +74,36 @@ def test_cli_ingests_hermes_state_db_latest(tmp_path, capsys):
 
     output = capsys.readouterr().out
     assert "hermes_state_db" in output
+
+
+def test_cli_export_writes_split_files_and_manifest(tmp_path):
+    for index in range(4):
+        trace_path = tmp_path / f"trace-{index}.jsonl"
+        trace_path.write_text(
+            "\n".join(
+                [
+                    json.dumps({"role": "user", "content": f"hello {index}"}),
+                    json.dumps({"role": "assistant", "content": "Done. Verified with tests."}),
+                ]
+            )
+        )
+        assert main(["--path", str(tmp_path), "ingest", "generic", str(trace_path)]) == 0
+        assert main(["--path", str(tmp_path), "eval", "latest"]) == 0
+
+    out_path = tmp_path / "data" / "sft.jsonl"
+    manifest_path = tmp_path / "data" / "manifest.json"
+    assert main([
+        "--path", str(tmp_path), "export", "sft",
+        "--out", str(out_path),
+        "--manifest-out", str(manifest_path),
+        "--splits", "train=0.5,validation=0.25,test=0.25",
+        "--min-score", "70",
+    ]) == 0
+
+    manifest = json.loads(manifest_path.read_text())
+    assert set(manifest["splits"]) == {"train", "validation", "test"}
+    assert manifest["records"] == 4
+    assert manifest["estimated_tokens"] > 0
+    assert (tmp_path / "data" / "sft.train.jsonl").exists()
+    assert (tmp_path / "data" / "sft.validation.jsonl").exists()
+    assert (tmp_path / "data" / "sft.test.jsonl").exists()

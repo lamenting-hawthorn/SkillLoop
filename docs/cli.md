@@ -82,6 +82,7 @@ Evaluates a trace and stores an `Evaluation` record.
 ```bash
 skillloop --path . eval latest
 skillloop --path . eval <trace-id>
+skillloop --path . eval latest --evaluator rubric
 ```
 
 ## `distill`
@@ -140,14 +141,20 @@ Exports supervised fine-tuning records.
 ```bash
 skillloop --path . export sft --out data/sft.jsonl
 skillloop --path . export sft --out data/sft.jsonl --min-score 70
+skillloop --path . export sft --out data/sft.jsonl --splits train=0.8,validation=0.1,test=0.1
+skillloop --path . export sft --out data/sft.jsonl --manifest-out data/manifest.json
 ```
 
 Use `--min-score N` to export only traces with a stored evaluation score greater than or equal to `N`. Traces without evaluations are skipped when this gate is active.
 
+Exports always write a dataset manifest. By default the manifest path is `<out>.manifest.json`; pass `--manifest-out` to choose a path. The manifest includes output file paths, export metadata, split-level record/token stats, trace/evaluation/proposal provenance summaries, and evaluator counts.
+
+Use `--splits` to write deterministic split files. For example `--splits train=0.8,validation=0.1,test=0.1` writes `data/sft.train.jsonl`, `data/sft.validation.jsonl`, and `data/sft.test.jsonl`.
+
 Record shape:
 
 ```json
-{"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}
+{"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}], "metadata": {"trace_id": "...", "evaluation_id": "..."}}
 ```
 
 ## `export dpo`
@@ -157,12 +164,13 @@ Exports preference records when chosen/rejected data is available.
 ```bash
 skillloop --path . export dpo --out data/dpo.jsonl
 skillloop --path . export dpo --out data/dpo.jsonl --min-score 70
+skillloop --path . export dpo --out data/dpo.jsonl --splits train=0.9,test=0.1
 ```
 
 Record shape:
 
 ```json
-{"prompt": "...", "chosen": "...", "rejected": "..."}
+{"prompt": "...", "chosen": "...", "rejected": "...", "metadata": {"trace_id": "...", "evaluation_id": "..."}}
 ```
 
 ## Full smoke test
@@ -178,5 +186,6 @@ python -m skillloop.cli --path "$tmp" distill latest
 python -m skillloop.cli --path "$tmp" review list --verbose
 python -m skillloop.cli --path "$tmp" export sft --out "$tmp/sft.jsonl" --min-score 70
 test -s "$tmp/sft.jsonl"
-rm -rf "$tmp"
+test -s "$tmp/sft.jsonl.manifest.json"
+echo "$tmp"
 ```
