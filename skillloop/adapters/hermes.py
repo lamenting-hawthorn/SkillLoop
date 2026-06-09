@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from skillloop.sanitize import redact_secrets
-from skillloop.schema import AgentMessage, AgentTrace, ToolCall
+from skillloop.schema import AgentMessage, AgentTrace, ToolCall, sha256_text, stable_json_dumps
+
+ADAPTER_NAME = "hermes"
+ADAPTER_VERSION = "1.1"
 
 
 def normalize_hermes_export(data: dict[str, Any]) -> AgentTrace:
@@ -24,6 +27,14 @@ def normalize_hermes_export(data: dict[str, Any]) -> AgentTrace:
                     arguments=dict(call.get("arguments") or call.get("function", {}).get("arguments") or {}),
                     result=call.get("result"),
                     success=call.get("success"),
+                    id=str(call.get("id") or call.get("tool_call_id") or ""),
+                    started_at=call.get("started_at"),
+                    ended_at=call.get("ended_at"),
+                    duration_ms=call.get("duration_ms"),
+                    exit_code=call.get("exit_code"),
+                    status=call.get("status"),
+                    error_type=call.get("error_type"),
+                    artifact_refs=call.get("artifact_refs") or [],
                 )
             )
         messages.append(
@@ -37,12 +48,20 @@ def normalize_hermes_export(data: dict[str, Any]) -> AgentTrace:
     return AgentTrace(
         source="hermes",
         messages=messages,
+        adapter={"name": ADAPTER_NAME, "version": ADAPTER_VERSION},
+        runtime={"name": str(data.get("runtime") or data.get("provider") or "hermes")},
         metadata={"session_id": data.get("session_id") or data.get("id"), "raw_keys": sorted(data.keys())},
+        raw_trace_sha256=sha256_text(stable_json_dumps(data)),
     )
 
 
 def load_hermes_export(path: str | Path) -> AgentTrace:
-    return normalize_hermes_export(json.loads(Path(path).read_text()))
+    source_path = Path(path)
+    raw_text = source_path.read_text()
+    trace = normalize_hermes_export(json.loads(raw_text))
+    trace.raw_artifact_ref = str(source_path)
+    trace.raw_trace_sha256 = sha256_text(raw_text)
+    return trace
 
 
 def _parse_tool_calls(raw: str | None) -> list[ToolCall]:
@@ -72,6 +91,14 @@ def _parse_tool_calls(raw: str | None) -> list[ToolCall]:
                 arguments=dict(arguments or {}),
                 result=item.get("result"),
                 success=item.get("success"),
+                id=str(item.get("id") or item.get("tool_call_id") or ""),
+                started_at=item.get("started_at"),
+                ended_at=item.get("ended_at"),
+                duration_ms=item.get("duration_ms"),
+                exit_code=item.get("exit_code"),
+                status=item.get("status"),
+                error_type=item.get("error_type"),
+                artifact_refs=item.get("artifact_refs") or [],
             )
         )
     return calls
@@ -134,6 +161,8 @@ def load_hermes_state_db(db_path: str | Path, session_id: str | None = None, lat
     return AgentTrace(
         source="hermes_state_db",
         messages=messages,
+        adapter={"name": "hermes_state_db", "version": ADAPTER_VERSION},
+        runtime={"name": "hermes", "source": str(session_row[1] or "")},
         metadata={
             "db_path": str(path),
             "session_id": session_row[0],
