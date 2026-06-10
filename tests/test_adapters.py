@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from skillloop.adapters.hermes import load_hermes_state_db, normalize_hermes_export
+from skillloop.adapters.hermes import load_hermes_state_db, normalize_hermes_export, list_hermes_state_sessions
 
 
 def test_hermes_export_normalizes_messages():
@@ -38,3 +38,5 @@ def test_hermes_state_db_loads_latest_session_read_only(tmp_path):
     assert trace.metadata["session_id"] == "new"
     assert [m.role for m in trace.messages] == ["user", "assistant"]
     assert trace.messages[1].tool_calls[0].name == "terminal"
+    assert list_hermes_state_sessions(db, limit=1) == ["new"]
+    assert list_hermes_state_sessions(db) == ["new", "old"]

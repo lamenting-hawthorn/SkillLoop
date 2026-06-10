@@ -10,12 +10,16 @@ def test_default_registry_exposes_rubric():
 
 def test_registry_evaluates_trace():
     registry = default_evaluator_registry()
-    trace = AgentTrace(source="test", messages=[AgentMessage(role="assistant", content="Done.")])
+    trace = AgentTrace(source="test", messages=[AgentMessage(role="assistant", content="Done")])
 
     evaluation = registry.evaluate(trace, "rubric")
 
     assert evaluation.evaluator_name == "rubric"
     assert evaluation.score >= 70
+    assert evaluation.component_provenance["kind"] == "evaluator"
+    assert evaluation.component_provenance["name"] == "rubric"
+    assert evaluation.component_provenance["component_sha256"]
+    assert evaluation.artifact_sha256
 
 
 def test_registry_fills_missing_evaluator_identity():

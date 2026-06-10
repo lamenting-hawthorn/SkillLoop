@@ -228,6 +228,9 @@ class Evaluation:
     evaluator_version: str = "1.0"
     evidence: list[dict[str, Any]] = field(default_factory=list)
     created_from_trace_schema_version: str = "1.0"
+    run_condition: dict[str, Any] = field(default_factory=dict)
+    component_provenance: dict[str, Any] = field(default_factory=dict)
+    artifact_sha256: str | None = None
 
     def __post_init__(self) -> None:
         self.trace_id = str(self.trace_id)
@@ -238,9 +241,20 @@ class Evaluation:
         self.evaluator_version = str(self.evaluator_version or "0")
         self.evidence = [redact_data(dict(item or {})) for item in self.evidence]
         self.created_from_trace_schema_version = str(self.created_from_trace_schema_version or "1.0")
+        self.run_condition = dict(self.run_condition or {})
+        self.component_provenance = dict(self.component_provenance or {})
+        self.artifact_sha256 = str(self.artifact_sha256) if self.artifact_sha256 is not None else None
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
+    def _dict_for_hash(self) -> dict[str, Any]:
+        data = self.to_dict(include_hash=False)
+        data.pop("artifact_sha256", None)
+        return data
+
+    def compute_artifact_sha256(self) -> str:
+        return sha256_text(stable_json_dumps(self._dict_for_hash()))
+
+    def to_dict(self, include_hash: bool = True) -> dict[str, Any]:
+        data = {
             "id": self.id,
             "trace_id": self.trace_id,
             "score": self.score,
@@ -251,7 +265,12 @@ class Evaluation:
             "evaluator_version": self.evaluator_version,
             "evidence": self.evidence,
             "created_from_trace_schema_version": self.created_from_trace_schema_version,
+            "run_condition": self.run_condition,
+            "component_provenance": self.component_provenance,
         }
+        if include_hash:
+            data["artifact_sha256"] = self.artifact_sha256 or self.compute_artifact_sha256()
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Evaluation":
@@ -266,6 +285,9 @@ class Evaluation:
             evaluator_version=str(data.get("evaluator_version") or "1.0"),
             evidence=[dict(item or {}) for item in data.get("evidence", [])],
             created_from_trace_schema_version=str(data.get("created_from_trace_schema_version") or "1.0"),
+            run_condition=dict(data.get("run_condition") or {}),
+            component_provenance=dict(data.get("component_provenance") or {}),
+            artifact_sha256=data.get("artifact_sha256"),
         )
 
 
@@ -283,6 +305,9 @@ class Proposal:
     applied_at: str | None = None
     source_trace_schema_version: str = "1.0"
     source_evaluation_id: str | None = None
+    source_evaluation_sha256: str | None = None
+    source_evaluation_provenance: dict[str, Any] = field(default_factory=dict)
+    producer_provenance: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.content = str(self.content or "")
@@ -293,6 +318,9 @@ class Proposal:
         self.applied_at = str(self.applied_at) if self.applied_at is not None else None
         self.source_trace_schema_version = str(self.source_trace_schema_version or "1.0")
         self.source_evaluation_id = str(self.source_evaluation_id) if self.source_evaluation_id is not None else None
+        self.source_evaluation_sha256 = str(self.source_evaluation_sha256) if self.source_evaluation_sha256 is not None else None
+        self.source_evaluation_provenance = dict(self.source_evaluation_provenance or {})
+        self.producer_provenance = dict(self.producer_provenance or {})
 
     def mark_applied(self) -> None:
         self.status = "applied"
@@ -312,6 +340,9 @@ class Proposal:
             "applied_at": self.applied_at,
             "source_trace_schema_version": self.source_trace_schema_version,
             "source_evaluation_id": self.source_evaluation_id,
+            "source_evaluation_sha256": self.source_evaluation_sha256,
+            "source_evaluation_provenance": self.source_evaluation_provenance,
+            "producer_provenance": self.producer_provenance,
         }
 
     @classmethod
@@ -329,4 +360,7 @@ class Proposal:
             applied_at=data.get("applied_at"),
             source_trace_schema_version=str(data.get("source_trace_schema_version") or "1.0"),
             source_evaluation_id=data.get("source_evaluation_id"),
+            source_evaluation_sha256=data.get("source_evaluation_sha256"),
+            source_evaluation_provenance=dict(data.get("source_evaluation_provenance") or {}),
+            producer_provenance=dict(data.get("producer_provenance") or {}),
         )

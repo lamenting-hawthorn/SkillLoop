@@ -15,6 +15,8 @@ from skillloop.distill.skills import propose_skill_updates
 from skillloop.eval.registry import default_evaluator_registry
 from skillloop.export.dpo import export_dpo_records
 from skillloop.export.sft import export_sft_records
+from skillloop.conditions import LoopCondition
+from skillloop.loop import LoopSchedule, load_schedule, proposals_with_provenance, run_outer_loop, save_schedule, tick
 from skillloop.schema import AgentTrace, Evaluation, Proposal
 from skillloop.store import SkillLoopStore
 from skillloop.training_config import TrainingConfigRequest, generate_training_config
@@ -102,7 +104,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
 def cmd_distill(args: argparse.Namespace) -> int:
     store = _store(args)
     trace = _resolve_trace(store, args.trace_id)
-    proposals = propose_memory_updates(trace) + propose_skill_updates(trace)
+    source_evaluation = store.latest_evaluation(trace.id)
+    proposals = proposals_with_provenance(trace.id, propose_memory_updates(trace) + propose_skill_updates(trace), source_evaluation)
     saved: list[tuple[Proposal, str, bool]] = []
     for proposal in proposals:
         saved_id = store.save_proposal(proposal)
@@ -271,6 +274,78 @@ def cmd_training_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def _condition_from_args(args: argparse.Namespace) -> LoopCondition:
+    if getattr(args, "condition", None):
+        condition = LoopCondition.from_json(args.condition)
+        if not getattr(args, "min_score_explicit", False):
+            return condition
+        return LoopCondition(
+            score_gte=args.min_score,
+            required_tags=condition.required_tags,
+            forbidden_tags=condition.forbidden_tags,
+            max_iterations=condition.max_iterations,
+        )
+    return LoopCondition(
+        score_gte=args.min_score,
+        required_tags=tuple(getattr(args, "require_tag", []) or []),
+        forbidden_tags=tuple(getattr(args, "forbid_tag", []) or []),
+        max_iterations=getattr(args, "max_iterations", None),
+    )
+
+
+def cmd_loop_run(args: argparse.Namespace) -> int:
+    store = _store(args)
+    condition = _condition_from_args(args)
+    summary = run_outer_loop(
+        store,
+        evaluator=args.evaluator,
+        min_score=args.min_score,
+        condition=condition,
+        only_unevaluated=not args.all,
+        distill_failures=not args.no_distill_failures,
+        limit=args.limit,
+    )
+    print(json.dumps(summary.to_dict(), indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_loop_schedule(args: argparse.Namespace) -> int:
+    store = _store(args)
+    condition = _condition_from_args(args)
+    schedule = LoopSchedule(
+        interval=args.interval,
+        evaluator=args.evaluator,
+        min_score=condition.score_gte,
+        condition=condition,
+        only_unevaluated=not args.all,
+        distill_failures=not args.no_distill_failures,
+        limit=args.limit,
+    )
+    path = save_schedule(store, schedule)
+    print(f"Wrote loop schedule to {path}")
+    print(json.dumps(schedule.to_dict(), indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_loop_status(args: argparse.Namespace) -> int:
+    store = _store(args)
+    try:
+        schedule = load_schedule(store)
+    except FileNotFoundError:
+        print("No loop schedule configured. Run `skillloop loop schedule ...` first.")
+        return 0
+    print(json.dumps(schedule.to_dict(), indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_loop_tick(args: argparse.Namespace) -> int:
+    store = _store(args)
+    ran, summary, schedule = tick(store, force=args.force)
+    payload = {"ran": ran, "schedule": schedule.to_dict(), "summary": summary.to_dict() if summary is not None else None}
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SkillLoop: clean learning/export layer for agent traces")
     parser.add_argument("--path", default=".", help="Project root for .skillloop state (default: current directory)")
@@ -352,6 +427,41 @@ def build_parser() -> argparse.ArgumentParser:
     p_training.add_argument("--lora-rank", type=int, default=16)
     p_training.add_argument("--lora-alpha", type=int, default=16)
     p_training.set_defaults(func=cmd_training_config)
+
+    p_loop = sub.add_parser("loop", help="Run and schedule the outer self-improvement loop")
+    loop_sub = p_loop.add_subparsers(dest="loop_command", required=True)
+
+    p_loop_run = loop_sub.add_parser("run", help="Run one outer-loop evaluation/distillation pass now")
+    p_loop_run.add_argument("--evaluator", default="rubric")
+    p_loop_run.add_argument("--min-score", type=int, default=70)
+    p_loop_run.add_argument("--condition", default=None, help="JSON loop condition, e.g. '{\"score_gte\":80,\"forbidden_tags\":[\"tool_failure\"]}'")
+    p_loop_run.add_argument("--require-tag", action="append", default=[], help="Require evaluation tag for done condition; repeatable")
+    p_loop_run.add_argument("--forbid-tag", action="append", default=[], help="Fail done condition if evaluation tag is present; repeatable")
+    p_loop_run.add_argument("--max-iterations", type=int, default=None, help="Stop continuing a trace after this many prior evaluations")
+    p_loop_run.add_argument("--all", action="store_true", help="Re-evaluate traces that already have evaluations")
+    p_loop_run.add_argument("--no-distill-failures", action="store_true", help="Do not create proposals for traces below min-score")
+    p_loop_run.add_argument("--limit", type=int, default=None)
+    p_loop_run.set_defaults(func=cmd_loop_run)
+
+    p_loop_schedule = loop_sub.add_parser("schedule", help="Write a project-local loop schedule")
+    p_loop_schedule.add_argument("--interval", choices=["hourly", "daily", "weekly"], default="daily")
+    p_loop_schedule.add_argument("--evaluator", default="rubric")
+    p_loop_schedule.add_argument("--min-score", type=int, default=70)
+    p_loop_schedule.add_argument("--condition", default=None, help="JSON loop condition persisted into the schedule")
+    p_loop_schedule.add_argument("--require-tag", action="append", default=[])
+    p_loop_schedule.add_argument("--forbid-tag", action="append", default=[])
+    p_loop_schedule.add_argument("--max-iterations", type=int, default=None)
+    p_loop_schedule.add_argument("--all", action="store_true", help="Re-evaluate traces that already have evaluations")
+    p_loop_schedule.add_argument("--no-distill-failures", action="store_true")
+    p_loop_schedule.add_argument("--limit", type=int, default=None)
+    p_loop_schedule.set_defaults(func=cmd_loop_schedule)
+
+    p_loop_status = loop_sub.add_parser("status", help="Show current project-local loop schedule")
+    p_loop_status.set_defaults(func=cmd_loop_status)
+
+    p_loop_tick = loop_sub.add_parser("tick", help="Run scheduled loop if due, updating last/next run times")
+    p_loop_tick.add_argument("--force", action="store_true", help="Run even if the schedule is not due")
+    p_loop_tick.set_defaults(func=cmd_loop_tick)
 
     return parser
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from skillloop.schema import AgentTrace, Proposal
 
+DISTILLER_NAME = "skill_distiller"
+DISTILLER_VERSION = "1.0"
 WORKFLOW_SIGNALS = ("when ", "workflow", "first ", "then ", "steps", "procedure")
 
 
