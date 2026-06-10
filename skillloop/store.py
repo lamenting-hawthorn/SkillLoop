@@ -106,6 +106,7 @@ class SkillLoopStore:
 
     def save_evaluation(self, evaluation: Evaluation) -> str:
         self.init()
+        evaluation.artifact_sha256 = evaluation.compute_artifact_sha256()
         payload = json.dumps(evaluation.to_dict(), ensure_ascii=False)
         with self._connect() as conn:
             conn.execute(

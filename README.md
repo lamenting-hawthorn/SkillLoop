@@ -29,7 +29,9 @@ The MVP is local-first, stdlib-first, and review-first.
 - Creates deduplicated memory and skill proposals instead of silently mutating global state
 - Tracks proposal lifecycle from `pending` to `approved` to `applied`
 - Applies approved proposals only into the selected project directory
-- Exports SFT JSONL and DPO JSONL datasets with optional score gates
+- Exports SFT JSONL and DPO JSONL datasets with optional score gates, split files, manifests, provenance, and count/token stats
+- Replays traces through evaluator versions to benchmark score/evidence changes before training
+- Generates reviewed training config artifacts for Unsloth, TRL, and Axolotl without running training
 - Redacts common secret patterns during ingestion/export
 
 ## What SkillLoop does not do in v1
@@ -61,7 +63,7 @@ python -m skillloop.cli --path . traces list
 python -m skillloop.cli --path . eval latest --evaluator rubric
 python -m skillloop.cli --path . distill latest
 python -m skillloop.cli --path . review list --verbose
-python -m skillloop.cli --path . export sft --out data/sft.jsonl --min-score 70
+python -m skillloop.cli --path . export sft --out data/sft.jsonl --min-score 70 --splits train=0.8,validation=0.1,test=0.1
 python -m skillloop.cli --path . export dpo --out data/dpo.jsonl --min-score 70
 ```
 
@@ -95,8 +97,10 @@ skillloop --path <project-root> review list [--verbose]
 skillloop --path <project-root> review approve <proposal-id-prefix>
 skillloop --path <project-root> review reject <proposal-id-prefix>
 skillloop --path <project-root> apply
-skillloop --path <project-root> export sft --out <path> [--min-score N]
-skillloop --path <project-root> export dpo --out <path> [--min-score N]
+skillloop --path <project-root> export sft --out <path> [--min-score N] [--splits train=0.8,validation=0.1,test=0.1] [--manifest-out manifest.json]
+skillloop --path <project-root> export dpo --out <path> [--min-score N] [--splits train=0.8,validation=0.1,test=0.1] [--manifest-out manifest.json]
+skillloop --path <project-root> benchmark [--baseline rubric_legacy] [--candidates rubric] [--out benchmark.json]
+skillloop --path <project-root> training-config trl|unsloth|axolotl --dataset-manifest manifest.json --base-model <model> --output-dir <dir> --config-dir <dir>
 ```
 
 ## Clean export boundary
@@ -108,6 +112,7 @@ SkillLoop writes only under the selected project root by default:
 - approved memory exports: `.skillloop/approved/memory/*.md`
 - approved skill exports: `.skillloop/approved/skill/*.md`
 - training data exports: user-selected paths such as `data/sft.jsonl`
+- dataset manifests: default `<out>.manifest.json` or `--manifest-out <path>`
 
 This is intentional. The first version is a clean export layer, not a global self-mutating runtime.
 
@@ -118,12 +123,14 @@ skillloop/
   adapters/      Trace ingestion adapters
   apply/         Review-approved filesystem exports
   distill/       Memory and skill proposal generation
+  dataset.py     Dataset split, manifest, provenance, and stats helpers
   eval/          Evaluator registry, deterministic rubric, and structured evidence helpers
   export/        SFT and DPO dataset exporters
   review/        Proposal review queue helpers
   cli.py         Command-line interface
   schema.py      Normalized trace/eval/proposal dataclasses
   store.py       SQLite persistence layer
+  training_config.py  Unsloth/TRL/Axolotl config generation only
 examples/
   traces/        Sample input traces
 tests/           Pytest coverage for the MVP
@@ -141,6 +148,7 @@ SkillLoop is review-first:
 - Duplicate active proposals are skipped by content hash
 - Human approval is required before `apply`
 - Applied proposals are marked `applied` with an application timestamp
+- Dataset exports include trace/evaluation/proposal provenance in record metadata and manifest summaries
 - Approved exports stay inside `.skillloop/approved/`
 - `.env`, `.env.*`, generated datasets, and local state are gitignored
 
@@ -171,6 +179,9 @@ The current proof-of-work also includes the first trustworthy-data layer needed 
 - evaluator provenance and structured evidence
 - evaluator registry for versioned scoring strategies
 - proposal deduplication and applied lifecycle tracking
+- dataset manifests, split exports, export metadata, provenance summaries, and deterministic token/count stats
+- replay benchmark reports that compare evaluator versions before training
+- Unsloth, TRL, and Axolotl config generation with explicit no-auto-training safety flags
 
 See:
 

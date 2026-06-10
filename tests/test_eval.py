@@ -77,12 +77,18 @@ def test_evaluation_provenance_round_trip():
     )
 
     evaluation = evaluate_trace(trace)
+    evaluation.run_condition = {"condition": {"score_gte": 70}, "result": {"passed": True}}
+    evaluation.component_provenance = {"kind": "evaluator", "component_sha256": "abc"}
+    evaluation.artifact_sha256 = evaluation.compute_artifact_sha256()
     restored = type(evaluation).from_dict(evaluation.to_dict())
 
     assert restored.evaluator_name == evaluation.evaluator_name
     assert restored.evaluator_version == evaluation.evaluator_version
     assert restored.created_from_trace_schema_version == "1.1"
     assert restored.evidence == evaluation.evidence
+    assert restored.run_condition == evaluation.run_condition
+    assert restored.component_provenance == evaluation.component_provenance
+    assert restored.artifact_sha256 == evaluation.artifact_sha256
 
 
 def test_evaluation_records_file_artifact_and_user_feedback_evidence():
