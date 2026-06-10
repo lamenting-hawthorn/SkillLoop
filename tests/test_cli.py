@@ -22,6 +22,14 @@ def test_cli_ingest_eval_distill_export_flow(tmp_path, capsys):
     assert main(["--path", str(tmp_path), "distill", "latest"]) == 0
     assert main(["--path", str(tmp_path), "review", "list"]) == 0
 
+    from skillloop.store import SkillLoopStore
+    proposals = SkillLoopStore(tmp_path).list_proposals(status=None)
+    assert proposals
+    assert proposals[0].source_evaluation_id
+    assert proposals[0].source_evaluation_sha256
+    assert proposals[0].source_evaluation_provenance["kind"] == "evaluator"
+    assert proposals[0].producer_provenance["kind"] == "distiller"
+
     out_path = tmp_path / "data" / "sft.jsonl"
     assert main(["--path", str(tmp_path), "export", "sft", "--out", str(out_path), "--min-score", "70"]) == 0
 

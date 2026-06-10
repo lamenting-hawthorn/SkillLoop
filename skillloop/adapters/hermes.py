@@ -104,6 +104,25 @@ def _parse_tool_calls(raw: str | None) -> list[ToolCall]:
     return calls
 
 
+def list_hermes_state_sessions(db_path: str | Path, *, limit: int | None = None) -> list[str]:
+    """Return Hermes session IDs ordered newest-first without mutating state.db."""
+    path = Path(db_path).expanduser().resolve()
+    if not path.exists():
+        raise FileNotFoundError(path)
+    query = """
+        SELECT id FROM sessions
+        WHERE COALESCE(message_count, 0) > 0
+        ORDER BY COALESCE(ended_at, started_at, 0) DESC, started_at DESC
+    """
+    args: tuple[int, ...] = ()
+    if limit is not None:
+        query += " LIMIT ?"
+        args = (int(limit),)
+    uri = f"file:{path}?mode=ro"
+    with sqlite3.connect(uri, uri=True) as conn:
+        return [str(row[0]) for row in conn.execute(query, args).fetchall()]
+
+
 def _latest_session_id(conn: sqlite3.Connection) -> str:
     row = conn.execute(
         """

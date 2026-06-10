@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from skillloop.provenance import component_provenance
 from skillloop.schema import AgentTrace, Evaluation
 
 TraceEvaluator = Callable[[AgentTrace], Evaluation]
@@ -41,6 +42,14 @@ class EvaluatorRegistry:
             result.evaluator_name = evaluator.name
         if result.evaluator_version in {"", "0"}:
             result.evaluator_version = evaluator.version
+        result.component_provenance = component_provenance(
+            kind="evaluator",
+            name=evaluator.name,
+            version=evaluator.version,
+            func=evaluator.evaluate,
+            extra={"description": evaluator.description},
+        )
+        result.artifact_sha256 = result.compute_artifact_sha256()
         return result
 
 

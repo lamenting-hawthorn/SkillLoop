@@ -5,6 +5,8 @@ import re
 from skillloop.schema import AgentTrace, Proposal
 
 SECRET_PATTERNS = ("api key", "token", "password", "secret", "sk-")
+DISTILLER_NAME = "memory_distiller"
+DISTILLER_VERSION = "1.0"
 PREFERENCE_PATTERNS = (
     r"remember that (?P<fact>.+)",
     r"i prefer (?P<fact>.+)",
