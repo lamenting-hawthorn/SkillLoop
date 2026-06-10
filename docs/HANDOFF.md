@@ -308,3 +308,21 @@ At the start of every new session:
 2. Check `git log --oneline -10` for any commits since the last update.
 3. Run `python -m pytest -q` to confirm test baseline.
 4. Pick up from the first unchecked item in section 3 (short-term).
+
+---
+
+## 9. Related Hermes Skills
+
+These operational skills live in `~/.hermes/skills/system/` and complement
+SkillLoop's loop engineering work. They handle the Hermes runtime side
+(SkillLoop is the governor, Hermes is the runtime — Rule #1).
+
+| Skill | Path | Purpose |
+|-------|------|---------|
+| `pre-loop-checklist` | `system/pre-loop-checklist/` | 4-condition test + 30-second check before creating cron jobs |
+| `cron-job-workflows` | `system/cron-job-workflows/` | Cron patterns + STATE.md + Ralph Wiggum detection + Red Flags |
+| `goal-loop` | `system/goal-loop/` | /goal primitive: cron jobs that run until objective condition met |
+
+See `docs/analysis/loop-engineering-analysis.md` section 8 for full details on
+what each skill contains and how they were derived from the loop engineering
+framework.
