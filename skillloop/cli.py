@@ -79,6 +79,10 @@ def cmd_setup(args: argparse.Namespace) -> int:
     hermes_db = Path(args.db_path).expanduser().resolve()
     if not hermes_db.exists():
         raise SystemExit(f"Hermes state database not found: {hermes_db}")
+    if args.max_sessions <= 0:
+        raise SystemExit("--max-sessions must be positive")
+    if not 0 <= args.min_score <= 100:
+        raise SystemExit("--min-score must be between 0 and 100")
     policy = SkillLoopPolicy.default()
     policy.ingestion = IngestionPolicy(
         enabled=True,
@@ -110,12 +114,20 @@ def cmd_status(args: argparse.Namespace) -> int:
     dataset_manifest = (store.root / policy.dataset.out).resolve().with_suffix(Path(policy.dataset.out).suffix + ".manifest.json")
     dataset_stats = None
     if dataset_manifest.exists():
-        manifest = json.loads(dataset_manifest.read_text(encoding="utf-8"))
-        dataset_stats = {
-            "manifest": str(dataset_manifest),
-            "records": manifest.get("records", 0),
-            "estimated_tokens": manifest.get("estimated_tokens", 0),
-        }
+        try:
+            manifest = json.loads(dataset_manifest.read_text(encoding="utf-8"))
+            dataset_stats = {
+                "manifest": str(dataset_manifest),
+                "records": manifest.get("records", 0),
+                "estimated_tokens": manifest.get("estimated_tokens", 0),
+            }
+        except (json.JSONDecodeError, OSError) as exc:
+            dataset_stats = {
+                "manifest": str(dataset_manifest),
+                "records": 0,
+                "estimated_tokens": 0,
+                "error": f"failed to load manifest: {exc}",
+            }
     status = {
         "root": str(store.root),
         "state_dir": str(store.state_dir),
@@ -136,10 +148,13 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(_format_count("evaluations", len(evaluations)))
         print(_format_count("pending proposals", len(pending)))
         if dataset_stats:
-            print(
-                f"dataset: records={dataset_stats['records']} "
-                f"estimated_tokens={dataset_stats['estimated_tokens']} manifest={dataset_stats['manifest']}"
-            )
+            if dataset_stats.get("error"):
+                print(f"dataset: error={dataset_stats['error']} manifest={dataset_stats['manifest']}")
+            else:
+                print(
+                    f"dataset: records={dataset_stats['records']} "
+                    f"estimated_tokens={dataset_stats['estimated_tokens']} manifest={dataset_stats['manifest']}"
+                )
         else:
             print("dataset: none")
         if runs:
@@ -453,6 +468,8 @@ def cmd_controller_run(args: argparse.Namespace) -> int:
 
 def cmd_controller_history(args: argparse.Namespace) -> int:
     store = _store(args)
+    if args.limit is not None and args.limit <= 0:
+        raise SystemExit("--limit must be positive")
     runs = store.list_controller_runs(limit=args.limit)
     if not runs:
         print("No controller runs found.")

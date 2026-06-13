@@ -186,12 +186,16 @@ class SkillLoopStore:
 
     def save_controller_run(self, report: dict) -> str:
         self.init()
+        if not report.get("id"):
+            raise ValueError("report must have non-empty 'id'")
+        if not report.get("started_at"):
+            raise ValueError("report must have non-empty 'started_at'")
         run_id = str(report["id"])
         payload = json.dumps(report, ensure_ascii=False)
         with self._connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO controller_runs (id, started_at, finished_at, payload) VALUES (?, ?, ?, ?)",
-                (run_id, str(report.get("started_at") or ""), report.get("finished_at"), payload),
+                (run_id, str(report["started_at"]), report.get("finished_at"), payload),
             )
         return run_id
 
@@ -211,9 +215,10 @@ class SkillLoopStore:
         with self._connect() as conn:
             row = conn.execute("SELECT payload FROM controller_runs WHERE id = ?", (run_id,)).fetchone()
             if row is None:
+                escaped_id = run_id.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
                 rows = conn.execute(
-                    "SELECT payload FROM controller_runs WHERE id LIKE ? ORDER BY started_at DESC",
-                    (f"{run_id}%",),
+                    "SELECT payload FROM controller_runs WHERE id LIKE ? ESCAPE '\\' ORDER BY started_at DESC",
+                    (f"{escaped_id}%",),
                 ).fetchall()
                 if len(rows) == 1:
                     row = rows[0]

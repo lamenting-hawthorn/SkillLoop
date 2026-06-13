@@ -119,7 +119,9 @@ checklist against the task. If it doesn't pass, do NOT build a goal loop.
 ### Step 2: Initialize STATE.md
 
 Create a STATE.md in the project root (or .hermes/ directory) using the
-template from cron-job-workflows skill. The first run reads this to resume.
+template from cron-job-workflows skill. After creating the cron job, persist
+the exact returned `job_id` in STATE.md so the loop can self-cancel safely.
+The first run reads this to resume.
 
 ### Step 3: Create the cron job
 
@@ -173,9 +175,9 @@ Dispatch a checker subagent via delegate_task:
 - Write final status to STATE.md under "## Stop conditions met"
 - Final response: report success with specific evidence (test output,
   commit hash, etc.)
-- IMPORTANT: After reporting success, call cronjob(action='list') to find
-  this job, then cronjob(action='remove', job_id=THE_JOB_ID) to self-cancel.
-  Search for the job by name or look for the one with your prompt text.
+- IMPORTANT: The job's STATE.md must contain the exact `job_id` returned
+  when the loop was created. After reporting success, read that stored ID
+  and call cronjob(action='remove', job_id=STORED_JOB_ID) to self-cancel.
 - Do NOT continue running after goal is met.
 
 ### 4. If goal is NOT met:
@@ -218,7 +220,7 @@ Dispatch a checker subagent via delegate_task:
 ## Example: CI Triage Goal Loop
 
 ```python
-cronjob(
+job = cronjob(
     action='create',
     name='auth-quality-goal-loop',
     schedule='30m',
@@ -238,10 +240,11 @@ Read STATE.md at project root. Update it at the end of every run.
 
 [Full template follows with checked values...]
 """,
-    workdir='/Users/raghav/myproject',
+    workdir='<your-project-path>',
     skills=['pre-loop-checklist', 'cron-job-workflows'],
     enabled_toolsets=['terminal', 'file', 'delegation', 'cronjob'],
 )
+# Record job['job_id'] in STATE.md before the first tick runs.
 ```
 
 ## Self-Cancellation
@@ -249,11 +252,8 @@ Read STATE.md at project root. Update it at the end of every run.
 When the goal is met, the cron agent calls:
 
 ```python
-# Find this job
-jobs = cronjob(action='list')
-# Find your job in the list (match by name or prompt content)
-# Remove it
-cronjob(action='remove', job_id='THE_JOB_ID')
+# Read the exact job_id persisted in STATE.md when the loop was created.
+cronjob(action='remove', job_id=stored_job_id)
 ```
 
 The `cronjob` tool is enabled in the `enabled_toolsets` so the agent can
