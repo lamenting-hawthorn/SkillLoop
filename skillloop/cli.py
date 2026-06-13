@@ -9,6 +9,7 @@ from skillloop.adapters.generic_jsonl import load_generic_jsonl
 from skillloop.adapters.hermes import load_hermes_export, load_hermes_state_db
 from skillloop.apply.filesystem import export_approved
 from skillloop.benchmark import replay_benchmark, write_benchmark_report
+from skillloop.controller import controller_tick
 from skillloop.dataset import build_manifest, parse_split_spec, split_records, write_jsonl, write_manifest
 from skillloop.distill.memory import propose_memory_updates
 from skillloop.distill.skills import propose_skill_updates
@@ -17,6 +18,7 @@ from skillloop.export.dpo import export_dpo_records
 from skillloop.export.sft import export_sft_records
 from skillloop.conditions import LoopCondition
 from skillloop.loop import LoopSchedule, load_schedule, proposals_with_provenance, run_outer_loop, save_schedule, tick
+from skillloop.policy import DatasetPolicy, IngestionPolicy, SkillLoopPolicy
 from skillloop.schema import AgentTrace, Evaluation, Proposal
 from skillloop.store import SkillLoopStore
 from skillloop.training_config import TrainingConfigRequest, generate_training_config
@@ -24,6 +26,21 @@ from skillloop.training_config import TrainingConfigRequest, generate_training_c
 
 def _store(args: argparse.Namespace) -> SkillLoopStore:
     return SkillLoopStore(Path(args.path))
+
+
+def _policy_path(store: SkillLoopStore) -> Path:
+    return store.state_dir / "policy.json"
+
+
+def _load_policy(store: SkillLoopStore) -> SkillLoopPolicy:
+    path = _policy_path(store)
+    if not path.exists():
+        return SkillLoopPolicy.default()
+    return SkillLoopPolicy.load(path)
+
+
+def _format_count(label: str, count: int) -> str:
+    return f"{label}: {count}"
 
 
 def _resolve_trace(store: SkillLoopStore, trace_ref: str) -> AgentTrace:
@@ -51,6 +68,86 @@ def cmd_init(args: argparse.Namespace) -> int:
     store = _store(args)
     store.init()
     print(f"Initialized SkillLoop at {store.state_dir}")
+    return 0
+
+
+def cmd_setup(args: argparse.Namespace) -> int:
+    store = _store(args)
+    store.init()
+    if args.connect != "hermes":
+        raise SystemExit(f"Unsupported setup connector: {args.connect}")
+    hermes_db = Path(args.db_path).expanduser().resolve()
+    if not hermes_db.exists():
+        raise SystemExit(f"Hermes state database not found: {hermes_db}")
+    policy = SkillLoopPolicy.default()
+    policy.ingestion = IngestionPolicy(
+        enabled=True,
+        adapter="hermes-db",
+        hermes_db_path=str(hermes_db),
+        latest=False,
+        max_sessions=args.max_sessions,
+    )
+    policy.dataset = DatasetPolicy(enabled=args.auto_export, kind="sft", out=args.dataset_out, min_score=args.min_score)
+    policy.evaluation.min_score = args.min_score
+    policy.evaluation.condition = LoopCondition(score_gte=args.min_score)
+    policy_path = policy.save(_policy_path(store))
+    print(f"Wrote policy to {policy_path}")
+    if args.start:
+        report = controller_tick(store, policy)
+        print(f"Ran controller tick {report.id}: {report.summary}")
+    return 0
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    store = _store(args)
+    store.init()
+    policy_path = _policy_path(store)
+    traces = store.list_traces()
+    evaluations = store.list_evaluations()
+    pending = store.list_proposals(status="pending")
+    runs = store.list_controller_runs(limit=1)
+    policy = _load_policy(store)
+    dataset_manifest = (store.root / policy.dataset.out).resolve().with_suffix(Path(policy.dataset.out).suffix + ".manifest.json")
+    dataset_stats = None
+    if dataset_manifest.exists():
+        manifest = json.loads(dataset_manifest.read_text(encoding="utf-8"))
+        dataset_stats = {
+            "manifest": str(dataset_manifest),
+            "records": manifest.get("records", 0),
+            "estimated_tokens": manifest.get("estimated_tokens", 0),
+        }
+    status = {
+        "root": str(store.root),
+        "state_dir": str(store.state_dir),
+        "policy": str(policy_path) if policy_path.exists() else None,
+        "traces": len(traces),
+        "evaluations": len(evaluations),
+        "pending_proposals": len(pending),
+        "dataset": dataset_stats,
+        "last_controller_run": runs[0] if runs else None,
+    }
+    if args.json:
+        print(json.dumps(status, indent=2, ensure_ascii=False))
+    else:
+        print(f"SkillLoop status for {store.root}")
+        print(f"state: {store.state_dir}")
+        print(f"policy: {policy_path if policy_path.exists() else 'not configured'}")
+        print(_format_count("traces", len(traces)))
+        print(_format_count("evaluations", len(evaluations)))
+        print(_format_count("pending proposals", len(pending)))
+        if dataset_stats:
+            print(
+                f"dataset: records={dataset_stats['records']} "
+                f"estimated_tokens={dataset_stats['estimated_tokens']} manifest={dataset_stats['manifest']}"
+            )
+        else:
+            print("dataset: none")
+        if runs:
+            run = runs[0]
+            summary = run.get("summary", {})
+            print(f"last controller run: {run.get('id')} finished={run.get('finished_at')} errors={summary.get('errors')}")
+        else:
+            print("last controller run: none")
     return 0
 
 
@@ -346,6 +443,42 @@ def cmd_loop_tick(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_controller_run(args: argparse.Namespace) -> int:
+    store = _store(args)
+    policy = _load_policy(store)
+    report = controller_tick(store, policy)
+    print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_controller_history(args: argparse.Namespace) -> int:
+    store = _store(args)
+    runs = store.list_controller_runs(limit=args.limit)
+    if not runs:
+        print("No controller runs found.")
+        return 0
+    for run in runs:
+        summary = run.get("summary", {})
+        print(
+            f"{run.get('id')}\t{run.get('finished_at') or run.get('started_at')}\t"
+            f"errors={summary.get('errors', 0)}\t"
+            f"traces={summary.get('traces_seen', 0)}\t"
+            f"evaluated={summary.get('traces_evaluated', 0)}\t"
+            f"review={summary.get('requires_review', 0)}"
+        )
+    return 0
+
+
+def cmd_controller_show(args: argparse.Namespace) -> int:
+    store = _store(args)
+    try:
+        run = store.get_controller_run(args.run_id)
+    except KeyError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(run, indent=2, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SkillLoop: clean learning/export layer for agent traces")
     parser.add_argument("--path", default=".", help="Project root for .skillloop state (default: current directory)")
@@ -353,6 +486,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_init = sub.add_parser("init", help="Initialize local .skillloop state")
     p_init.set_defaults(func=cmd_init)
+
+    p_setup = sub.add_parser("setup", help="Configure SkillLoop as a local sidecar")
+    p_setup.add_argument("--connect", choices=["hermes"], required=True, help="Runtime to connect (currently: hermes)")
+    p_setup.add_argument("--start", action="store_true", help="Run one controller tick immediately after writing policy")
+    p_setup.add_argument("--db-path", default=str(Path.home() / ".hermes" / "state.db"), help="Hermes state.db path")
+    p_setup.add_argument("--max-sessions", type=int, default=20, help="Maximum Hermes sessions to ingest per tick")
+    p_setup.add_argument("--min-score", type=int, default=70, help="Evaluation/dataset score gate")
+    p_setup.add_argument("--auto-export", action="store_true", help="Enable controller-managed SFT export")
+    p_setup.add_argument("--dataset-out", default="data/sft.jsonl", help="Controller-managed SFT output path")
+    p_setup.set_defaults(func=cmd_setup)
+
+    p_status = sub.add_parser("status", help="Show current SkillLoop state")
+    p_status.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    p_status.set_defaults(func=cmd_status)
 
     p_ingest = sub.add_parser("ingest", help="Ingest a trace")
     p_ingest.add_argument("adapter", choices=["generic", "hermes", "hermes-db"])
@@ -462,6 +609,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_loop_tick = loop_sub.add_parser("tick", help="Run scheduled loop if due, updating last/next run times")
     p_loop_tick.add_argument("--force", action="store_true", help="Run even if the schedule is not due")
     p_loop_tick.set_defaults(func=cmd_loop_tick)
+
+    p_controller = sub.add_parser("controller", help="Run and inspect autonomous controller ticks")
+    controller_sub = p_controller.add_subparsers(dest="controller_command", required=True)
+    p_controller_run = controller_sub.add_parser("run", help="Run one controller tick using .skillloop/policy.json if present")
+    p_controller_run.set_defaults(func=cmd_controller_run)
+    p_controller_history = controller_sub.add_parser("history", help="List stored controller run summaries")
+    p_controller_history.add_argument("--limit", type=int, default=20)
+    p_controller_history.set_defaults(func=cmd_controller_history)
+    p_controller_show = controller_sub.add_parser("show", help="Show a stored controller run by full id or unique prefix")
+    p_controller_show.add_argument("run_id")
+    p_controller_show.set_defaults(func=cmd_controller_show)
 
     return parser
 

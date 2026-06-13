@@ -51,6 +51,16 @@ class SkillLoopStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS controller_runs (
+                    id TEXT PRIMARY KEY,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    payload TEXT NOT NULL
+                )
+                """
+            )
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path)
@@ -173,3 +183,42 @@ class SkillLoopStore:
         if row is None:
             raise KeyError(f"proposal not found: {proposal_id}")
         return Proposal.from_dict(json.loads(row[0]))
+
+    def save_controller_run(self, report: dict) -> str:
+        self.init()
+        run_id = str(report["id"])
+        payload = json.dumps(report, ensure_ascii=False)
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO controller_runs (id, started_at, finished_at, payload) VALUES (?, ?, ?, ?)",
+                (run_id, str(report.get("started_at") or ""), report.get("finished_at"), payload),
+            )
+        return run_id
+
+    def list_controller_runs(self, limit: int | None = None) -> list[dict]:
+        self.init()
+        query = "SELECT payload FROM controller_runs ORDER BY started_at DESC"
+        args: tuple[int, ...] = ()
+        if limit is not None:
+            query += " LIMIT ?"
+            args = (int(limit),)
+        with self._connect() as conn:
+            rows = conn.execute(query, args).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
+    def get_controller_run(self, run_id: str) -> dict:
+        self.init()
+        with self._connect() as conn:
+            row = conn.execute("SELECT payload FROM controller_runs WHERE id = ?", (run_id,)).fetchone()
+            if row is None:
+                rows = conn.execute(
+                    "SELECT payload FROM controller_runs WHERE id LIKE ? ORDER BY started_at DESC",
+                    (f"{run_id}%",),
+                ).fetchall()
+                if len(rows) == 1:
+                    row = rows[0]
+                elif len(rows) > 1:
+                    raise KeyError(f"controller run id prefix is ambiguous: {run_id}")
+        if row is None:
+            raise KeyError(f"controller run not found: {run_id}")
+        return json.loads(row[0])

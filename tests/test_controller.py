@@ -38,6 +38,9 @@ def test_controller_tick_ingests_evaluates_exports_and_records_report(tmp_path):
     assert len(run_files) == 1
     saved = json.loads(run_files[0].read_text())
     assert saved["id"] == report.id
+    stored_runs = store.list_controller_runs()
+    assert [run["id"] for run in stored_runs] == [report.id]
+    assert store.get_controller_run(report.id[:8])["id"] == report.id
     assert saved["summary"]["requires_review"] >= 1
 
 
