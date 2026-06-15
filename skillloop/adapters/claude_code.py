@@ -66,14 +66,14 @@ def _parse_ts(value: Any) -> datetime | None:
 
 def normalize_claude_code_session(raw_text: str, *, include_sidechains: bool = True) -> tuple[list[AgentMessage], dict[str, Any]]:
     lines: list[dict[str, Any]] = []
-    for raw in raw_text.splitlines():
-        raw = raw.strip()
-        if not raw:
-            continue
+    raw_lines = [raw.strip() for raw in raw_text.splitlines() if raw.strip()]
+    for index, raw in enumerate(raw_lines):
         try:
             parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            continue  # tolerate a partial trailing line on a live session
+        except json.JSONDecodeError as exc:
+            if index == len(raw_lines) - 1:
+                continue  # tolerate a partial trailing line on a live session
+            raise ValueError(f"Malformed JSONL line {index + 1} in Claude Code session") from exc
         if isinstance(parsed, dict):
             lines.append(parsed)
     if not include_sidechains:

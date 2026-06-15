@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 
+import pytest
+
 from skillloop.adapters.claude_code import latest_claude_code_session, load_claude_code_session
 
 
@@ -60,6 +62,39 @@ def test_claude_code_adapter_rejects_empty_session(tmp_path):
     except ValueError:
         return
     raise AssertionError("expected ValueError for a session with no usable messages")
+
+
+def test_claude_code_adapter_rejects_malformed_non_trailing_line(tmp_path):
+    session = tmp_path / "malformed_mid.jsonl"
+    session.write_text(
+        "\n".join(
+            [
+                json.dumps({"message": {"role": "user", "content": [{"type": "text", "text": "hi"}]}}),
+                '{"message": ',
+                json.dumps({"message": {"role": "assistant", "content": [{"type": "text", "text": "bye"}]}}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError):
+        load_claude_code_session(session)
+
+
+def test_claude_code_adapter_tolerates_malformed_trailing_line(tmp_path):
+    session = tmp_path / "live_partial.jsonl"
+    session.write_text(
+        json.dumps({"message": {"role": "user", "content": [{"type": "text", "text": "hi"}]}})
+        + "\n"
+        + '{"message": '
+        + "\n",
+        encoding="utf-8",
+    )
+
+    trace = load_claude_code_session(session)
+
+    assert [message.content for message in trace.messages] == ["hi"]
 
 
 def test_latest_claude_code_session_picks_newest(tmp_path):
