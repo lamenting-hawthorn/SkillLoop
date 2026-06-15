@@ -53,7 +53,9 @@ def save_controller_report(store: SkillLoopStore, report: ControllerRunReport) -
         report.finish()
     out = controller_runs_dir(store) / f"{report.id}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    payload = report.to_dict()
+    out.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    store.save_controller_run(payload)
     return out
 
 

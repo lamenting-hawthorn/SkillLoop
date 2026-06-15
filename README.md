@@ -85,6 +85,8 @@ skillloop --path . ingest generic examples/traces/simple_trace.jsonl
 
 ```text
 skillloop --path <project-root> init
+skillloop --path <project-root> setup --connect hermes [--start] [--auto-export]
+skillloop --path <project-root> status [--json]
 skillloop --path <project-root> ingest generic <jsonl-path>
 skillloop --path <project-root> ingest hermes <json-path>
 skillloop --path <project-root> ingest hermes-db --latest [--db-path ~/.hermes/state.db]
@@ -101,6 +103,9 @@ skillloop --path <project-root> export sft --out <path> [--min-score N] [--split
 skillloop --path <project-root> export dpo --out <path> [--min-score N] [--splits train=0.8,validation=0.1,test=0.1] [--manifest-out manifest.json]
 skillloop --path <project-root> benchmark [--baseline rubric_legacy] [--candidates rubric] [--out benchmark.json]
 skillloop --path <project-root> training-config trl|unsloth|axolotl --dataset-manifest manifest.json --base-model <model> --output-dir <dir> --config-dir <dir>
+skillloop --path <project-root> controller run
+skillloop --path <project-root> controller history [--limit N]
+skillloop --path <project-root> controller show <run-id-or-prefix>
 ```
 
 ## Clean export boundary

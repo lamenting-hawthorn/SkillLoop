@@ -1,6 +1,8 @@
 import json
 import sqlite3
 
+import pytest
+
 from skillloop.cli import main
 
 
@@ -82,6 +84,60 @@ def test_cli_ingests_hermes_state_db_latest(tmp_path, capsys):
 
     output = capsys.readouterr().out
     assert "hermes_state_db" in output
+
+
+def test_cli_setup_status_and_controller_history(tmp_path, capsys):
+    db = tmp_path / "state.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, title TEXT, started_at REAL, ended_at REAL, message_count INTEGER)")
+    conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, timestamp REAL, active INTEGER)")
+    conn.execute("INSERT INTO sessions VALUES ('s1', 'cli', 'Session', 1.0, NULL, 2)")
+    conn.execute("INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'user', 'Remember concise status.', NULL, 1.1, 1)")
+    conn.execute("INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'assistant', 'Done. Verified with tests.', NULL, 1.2, 1)")
+    conn.commit()
+    conn.close()
+
+    assert main(["--path", str(tmp_path), "setup", "--connect", "hermes", "--db-path", str(db), "--start", "--auto-export"]) == 0
+    assert (tmp_path / ".skillloop" / "policy.json").exists()
+    assert main(["--path", str(tmp_path), "status"]) == 0
+    assert main(["--path", str(tmp_path), "controller", "history"]) == 0
+
+    output = capsys.readouterr().out
+    assert "Wrote policy" in output
+    assert "Ran controller tick" in output
+    assert "pending proposals" in output
+    assert "dataset: records=" in output
+    assert "errors=0" in output
+
+
+def test_cli_setup_rejects_invalid_bounds(tmp_path):
+    db = tmp_path / "state.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, title TEXT, started_at REAL, ended_at REAL, message_count INTEGER)")
+    conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, timestamp REAL, active INTEGER)")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(SystemExit, match="--max-sessions must be positive"):
+        main(["--path", str(tmp_path), "setup", "--connect", "hermes", "--db-path", str(db), "--max-sessions", "0"])
+    with pytest.raises(SystemExit, match="--min-score must be between 0 and 100"):
+        main(["--path", str(tmp_path), "setup", "--connect", "hermes", "--db-path", str(db), "--min-score", "101"])
+
+
+def test_cli_status_handles_corrupt_dataset_manifest(tmp_path, capsys):
+    manifest = tmp_path / "data" / "sft.jsonl.manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("{not json", encoding="utf-8")
+
+    assert main(["--path", str(tmp_path), "status"]) == 0
+
+    output = capsys.readouterr().out
+    assert "dataset: error=failed to load manifest" in output
+
+
+def test_cli_controller_history_rejects_non_positive_limit(tmp_path):
+    with pytest.raises(SystemExit, match="--limit must be positive"):
+        main(["--path", str(tmp_path), "controller", "history", "--limit", "0"])
 
 
 def test_cli_export_writes_split_files_and_manifest(tmp_path):

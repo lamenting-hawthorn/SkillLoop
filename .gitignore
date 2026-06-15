@@ -24,3 +24,5 @@ data/*.jsonl
 !.env.example
 .venv/
 venv/
+.worktrees/
+docs/HANDOFF.md

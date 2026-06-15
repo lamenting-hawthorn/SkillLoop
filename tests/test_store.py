@@ -1,3 +1,5 @@
+import pytest
+
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
 from skillloop.schema import AgentMessage, AgentTrace, Evaluation, sha256_text
 from skillloop.store import SkillLoopStore
@@ -58,3 +60,20 @@ def test_store_preserves_raw_trace_and_hashes(tmp_path):
     assert loaded.raw_trace_sha256 == sha256_text(raw_text)
     assert loaded.normalized_trace_sha256 == loaded.compute_normalized_sha256()
     assert store.read_preserved_raw_trace(loaded) == raw_text
+
+
+def test_store_validates_controller_run_report_contract(tmp_path):
+    store = SkillLoopStore(tmp_path)
+
+    with pytest.raises(ValueError, match="non-empty 'id'"):
+        store.save_controller_run({"started_at": "2026-01-01T00:00:00+00:00"})
+    with pytest.raises(ValueError, match="non-empty 'started_at'"):
+        store.save_controller_run({"id": "run-1"})
+
+
+def test_store_controller_run_prefix_search_escapes_like_wildcards(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    store.save_controller_run({"id": "a_b", "started_at": "2026-01-01T00:00:00+00:00"})
+    store.save_controller_run({"id": "a1b", "started_at": "2026-01-02T00:00:00+00:00"})
+
+    assert store.get_controller_run("a_")["id"] == "a_b"

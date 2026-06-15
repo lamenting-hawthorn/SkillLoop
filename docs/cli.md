@@ -26,6 +26,26 @@ Creates:
 .skillloop/skillloop.db
 ```
 
+## `setup`
+
+Configures SkillLoop as a local sidecar for Hermes by writing `.skillloop/policy.json` with `hermes-db` ingestion. With `--start`, it immediately runs one controller tick.
+
+```bash
+skillloop --path . setup --connect hermes --start
+skillloop --path . setup --connect hermes --db-path ~/.hermes/state.db --max-sessions 20 --auto-export
+```
+
+This is read-only against Hermes `state.db`; SkillLoop writes only under the selected `--path` root.
+
+## `status`
+
+Shows configured policy path, trace/evaluation/proposal counts, and the latest controller run.
+
+```bash
+skillloop --path . status
+skillloop --path . status --json
+```
+
 ## `ingest generic`
 
 Ingests a generic JSONL trace.
@@ -207,6 +227,19 @@ configs/unsloth/unsloth_config.json
 configs/unsloth/unsloth_sft_skeleton.py
 configs/axolotl/axolotl_config.yml
 ```
+
+## `controller run/history/show`
+
+Runs the autonomous controller once using `.skillloop/policy.json` if present, and inspects prior run reports stored in SQLite.
+
+```bash
+skillloop --path . controller run
+skillloop --path . controller history
+skillloop --path . controller history --limit 5
+skillloop --path . controller show <run-id-or-prefix>
+```
+
+Controller run reports are also mirrored as JSON under `.skillloop/controller_runs/` for easy inspection.
 
 ## Full smoke test
 
