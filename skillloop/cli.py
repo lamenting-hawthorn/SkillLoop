@@ -92,7 +92,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         latest=False,
         max_sessions=args.max_sessions,
     )
-    policy.dataset = DatasetPolicy(enabled=args.auto_export, kind="sft", out=args.dataset_out, min_score=args.min_score)
+    policy.dataset = DatasetPolicy(enabled=args.auto_export, auto_update=args.auto_export, kind="sft", out=args.dataset_out, min_score=args.min_score)
     policy.evaluation.min_score = args.min_score
     policy.evaluation.condition = LoopCondition(score_gte=args.min_score)
     policy_path = policy.save(_policy_path(store))

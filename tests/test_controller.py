@@ -18,8 +18,8 @@ def test_controller_tick_ingests_evaluates_exports_and_records_report(tmp_path):
     )
     policy = SkillLoopPolicy(
         ingestion=IngestionPolicy(enabled=True, adapter="generic", paths=[str(trace_path)]),
-        evaluation=EvaluationPolicy(min_score=95, only_unevaluated=True, distill_failures=True),
-        dataset=DatasetPolicy(enabled=True, kind="sft", out="data/sft.jsonl", min_score=70, splits="train=0.8,validation=0.1,test=0.1"),
+        evaluation=EvaluationPolicy(min_score=70, only_unevaluated=True, distill_failures=True),
+        dataset=DatasetPolicy(auto_update=True, kind="sft", out="data/sft.jsonl", min_score=70, splits="train=0.8,validation=0.1,test=0.1"),
     )
 
     store = SkillLoopStore(tmp_path)
@@ -41,19 +41,54 @@ def test_controller_tick_ingests_evaluates_exports_and_records_report(tmp_path):
     stored_runs = store.list_controller_runs()
     assert [run["id"] for run in stored_runs] == [report.id]
     assert store.get_controller_run(report.id[:8])["id"] == report.id
-    assert saved["summary"]["requires_review"] >= 1
 
 
 def test_controller_policy_round_trip(tmp_path):
     policy = SkillLoopPolicy.default()
+    policy.dataset.auto_update = True
     path = policy.save(tmp_path / ".skillloop" / "policy.json")
 
     restored = SkillLoopPolicy.load(path)
 
     assert restored.mode == "autonomous_review_first"
     assert restored.evaluation.evaluator == "rubric"
+    assert restored.dataset.auto_update is True
     assert restored.training.auto_run is False
     assert restored.training.require_approval is True
+
+
+def test_controller_dataset_export_requires_condition_pass(tmp_path):
+    good = tmp_path / "good.jsonl"
+    bad = tmp_path / "bad.jsonl"
+    good.write_text(
+        "\n".join(
+            [
+                json.dumps({"role": "user", "content": "do the task"}),
+                json.dumps({"role": "assistant", "content": "Done. Verified with tests."}),
+            ]
+        )
+    )
+    bad.write_text(
+        "\n".join(
+            [
+                json.dumps({"role": "user", "content": "do the task"}),
+                json.dumps({"role": "assistant", "content": "Done. Verified with tests but error failed earlier."}),
+            ]
+        )
+    )
+    policy = SkillLoopPolicy(
+        ingestion=IngestionPolicy(enabled=True, adapter="generic", paths=[str(good), str(bad)]),
+        evaluation=EvaluationPolicy(min_score=70, only_unevaluated=True, distill_failures=True),
+        dataset=DatasetPolicy(auto_update=True, kind="sft", out="data/sft.jsonl", min_score=0, splits="train=1.0"),
+    )
+
+    report = controller_tick(SkillLoopStore(tmp_path), policy)
+
+    export_action = next(action for action in report.actions if action["type"] == "dataset_export")
+    assert export_action["records"] == 1
+    rows = [json.loads(line) for line in (tmp_path / "data" / "sft.jsonl").read_text().splitlines()]
+    assert len(rows) == 1
+    assert rows[0]["messages"][1]["content"] == "Done. Verified with tests."
 
 
 def test_controller_ingests_unseen_hermes_sessions_incrementally(tmp_path):

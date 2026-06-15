@@ -42,7 +42,8 @@ Important behavior:
 - validates `--min-score` in `0..100`
 - writes a conservative `.skillloop/policy.json`
 - reads Hermes `state.db` only; it does not mutate Hermes
-- `--auto-export` enables controller-managed SFT export
+- `--auto-export` enables controller-managed SFT export by writing `dataset.auto_update: true`
+- controller-managed export includes only traces whose latest evaluation passes the configured evaluation condition and dataset score gate
 
 ## `status`
 
@@ -293,7 +294,7 @@ skillloop --path . controller history --limit 5
 skillloop --path . controller show <run-id-or-prefix>
 ```
 
-Controller run reports are also mirrored as JSON under `.skillloop/controller_runs/` for easy inspection.
+Controller run reports are also mirrored as JSON under `.skillloop/controller_runs/` for easy inspection. If policy has `dataset.auto_update: true` (or legacy `dataset.enabled: true`), controller ticks update the configured dataset using only traces whose latest evaluation passes the evaluation condition and dataset score gate.
 
 ## `service install/status/uninstall`
 

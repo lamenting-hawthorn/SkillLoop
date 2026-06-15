@@ -90,6 +90,7 @@ class EvaluationPolicy:
 @dataclass
 class DatasetPolicy:
     enabled: bool = False
+    auto_update: bool = False
     kind: str = "sft"
     out: str = "data/sft.jsonl"
     min_score: int = 70
@@ -98,8 +99,10 @@ class DatasetPolicy:
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "DatasetPolicy":
         data = dict(data or {})
+        enabled = bool(data.get("enabled", False))
         return cls(
-            enabled=bool(data.get("enabled", False)),
+            enabled=enabled,
+            auto_update=bool(data.get("auto_update", enabled)),
             kind=str(data.get("kind") or "sft"),
             out=str(data.get("out") or "data/sft.jsonl"),
             min_score=int(data.get("min_score", 70)),
@@ -109,6 +112,7 @@ class DatasetPolicy:
     def to_dict(self) -> dict[str, Any]:
         return {
             "enabled": self.enabled,
+            "auto_update": self.auto_update,
             "kind": self.kind,
             "out": self.out,
             "min_score": self.min_score,

@@ -220,7 +220,7 @@ skillloop --path . setup --connect hermes \
   --start
 ```
 
-`--auto-export` enables controller-managed SFT export, still bounded by the configured score gate.
+`--auto-export` enables controller-managed SFT export (`dataset.auto_update: true`), still bounded by the configured evaluation condition and score gate.
 
 ## CLI overview
 

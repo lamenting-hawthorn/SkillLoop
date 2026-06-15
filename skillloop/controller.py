@@ -88,6 +88,15 @@ def _ingested_hermes_session_ids(store: SkillLoopStore) -> set[str]:
     return session_ids
 
 
+def _passes_dataset_gate(evaluation: Evaluation, policy: SkillLoopPolicy) -> bool:
+    if evaluation.score < policy.dataset.min_score:
+        return False
+    result = (evaluation.run_condition or {}).get("result")
+    if isinstance(result, dict) and "passed" in result:
+        return bool(result["passed"])
+    return policy.evaluation.condition.evaluate(evaluation, prior_iterations=0).passed
+
+
 def ingest_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -> list[str]:
     ingestion = policy.ingestion
     if not ingestion.enabled:
@@ -121,12 +130,12 @@ def ingest_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -> list[s
 
 def export_dataset_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -> dict[str, Any] | None:
     dataset = policy.dataset
-    if not dataset.enabled:
+    if not (dataset.enabled or dataset.auto_update):
         return None
     traces = []
     for trace in store.list_traces():
         latest = store.latest_evaluation(trace.id)
-        if latest is not None and latest.score >= dataset.min_score:
+        if latest is not None and _passes_dataset_gate(latest, policy):
             traces.append(trace)
     evaluations = _evaluations_by_trace(store, traces)
     proposals = _proposals_by_trace(store, traces)
@@ -154,7 +163,13 @@ def export_dataset_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -
         source_traces=traces,
         evaluations_by_trace=evaluations,
         proposals_by_trace=proposals,
-        export_metadata={"min_score": dataset.min_score, "split_spec": dataset.splits, "controller_managed": True},
+        export_metadata={
+            "min_score": dataset.min_score,
+            "split_spec": dataset.splits,
+            "controller_managed": True,
+            "auto_update": dataset.auto_update,
+            "condition": policy.evaluation.condition.to_dict(),
+        },
     )
     manifest_path = out.with_suffix(out.suffix + ".manifest.json")
     write_manifest(manifest_path, manifest)
