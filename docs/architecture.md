@@ -210,7 +210,7 @@ The outer-loop primitives support scheduled local evaluation/distillation passes
 - forbidden tags
 - max iterations
 
-These are local scheduling primitives, not a platform service yet.
+These are local scheduling primitives. Platform service installation is handled separately by `skillloop.service`: on macOS, SkillLoop can write a launchd plist plus `.skillloop/service.json` metadata for recurring controller ticks. The CLI prints the exact `launchctl` commands instead of silently loading or unloading OS services.
 
 ## Boundary with Hermes
 
@@ -222,8 +222,8 @@ This boundary is deliberate: it keeps the learning layer inspectable, reviewable
 
 ## Roadmap priorities
 
-1. Complete platform-aware background service installation (`launchd` first, then Linux service/cron support).
-2. Add dataset readiness judging before any training plan is recommended.
-3. Add evaluator staleness detection when evaluator code/provenance changes.
-4. Add stronger evidence-trust scoring so learning artifacts depend on tool/user evidence rather than assistant claims.
+1. Add a dataset readiness judge before any training plan is recommended.
+2. Add evaluator staleness detection when evaluator code/provenance changes.
+3. Add stronger evidence-trust scoring so learning artifacts depend on tool/user evidence rather than assistant claims.
+4. Add Linux service generation (`systemd` unit or cron) after the macOS launchd path has had real local use.
 5. Add approval-gated training plans; keep training execution separate until readiness, cost, evaluation, and promotion gates exist.
