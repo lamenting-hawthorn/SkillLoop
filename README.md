@@ -130,10 +130,11 @@ Available controller UX:
 - `skillloop controller run`
 - `skillloop controller history`
 - `skillloop controller show <run-id-or-prefix>`
+- `skillloop service install/status/uninstall` for launchd-backed recurring controller ticks on macOS
 
 Controller run reports are stored in SQLite and mirrored as JSON under `.skillloop/controller_runs/`.
 
-Background service installation is intentionally not complete yet. The next product step is a platform-aware service runner, starting with macOS launchd.
+Background service installation currently writes project-specific launchd plists and records `.skillloop/service.json`; it prints the exact `launchctl` commands rather than silently starting OS services.
 
 ## What SkillLoop intentionally does not do yet
 
@@ -201,6 +202,8 @@ skillloop --path . setup --connect hermes --start
 skillloop --path . status
 skillloop --path . controller history
 skillloop --path . controller show <run-id-or-prefix>
+skillloop --path . service install --kind launchd --interval-seconds 3600
+skillloop --path . service status
 ```
 
 This creates `.skillloop/policy.json` with read-only Hermes DB ingestion and runs one controller tick when `--start` is provided.

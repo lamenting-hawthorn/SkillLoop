@@ -295,6 +295,28 @@ skillloop --path . controller show <run-id-or-prefix>
 
 Controller run reports are also mirrored as JSON under `.skillloop/controller_runs/` for easy inspection.
 
+## `service install/status/uninstall`
+
+Installs, inspects, and removes the project-local background controller service metadata. On macOS, `service install` writes a launchd plist that runs `skillloop --path <project-root> controller run` on an interval. It prints the exact `launchctl bootstrap` / `bootout` commands instead of silently loading the service.
+
+```bash
+skillloop --path . service install --kind launchd --interval-seconds 3600
+skillloop --path . service status
+skillloop --path . service status --json
+skillloop --path . service uninstall
+```
+
+Generated files:
+
+```text
+~/Library/LaunchAgents/com.skillloop.controller.<hash>.plist
+.skillloop/service.json
+.skillloop/service.out.log
+.skillloop/service.err.log
+```
+
+Use `--launch-agents-dir` to write the plist somewhere else for tests or dry-run inspection.
+
 ## Full smoke test
 
 ```bash

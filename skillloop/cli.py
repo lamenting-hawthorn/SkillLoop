@@ -20,6 +20,7 @@ from skillloop.conditions import LoopCondition
 from skillloop.loop import LoopSchedule, load_schedule, proposals_with_provenance, run_outer_loop, save_schedule, tick
 from skillloop.policy import DatasetPolicy, IngestionPolicy, SkillLoopPolicy
 from skillloop.schema import AgentTrace, Evaluation, Proposal
+from skillloop.service import build_service_spec, read_service_metadata, remove_launchd_service, supported_default_kind, write_launchd_service
 from skillloop.store import SkillLoopStore
 from skillloop.training_config import TrainingConfigRequest, generate_training_config
 
@@ -496,6 +497,67 @@ def cmd_controller_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _service_interval_seconds(args: argparse.Namespace) -> int:
+    interval = int(args.interval_seconds)
+    if interval <= 0:
+        raise SystemExit("--interval-seconds must be positive")
+    return interval
+
+
+def cmd_service_install(args: argparse.Namespace) -> int:
+    store = _store(args)
+    store.init()
+    kind = args.kind or supported_default_kind()
+    if kind != "launchd":
+        raise SystemExit(f"Unsupported service kind for install: {kind}. Currently implemented: launchd")
+    spec = build_service_spec(
+        project_root=store.root,
+        state_dir=store.state_dir,
+        interval_seconds=_service_interval_seconds(args),
+        label=args.label,
+    )
+    path = write_launchd_service(spec, launch_agents_dir=args.launch_agents_dir)
+    print(f"Wrote launchd service plist to {path}")
+    print(f"label: {spec.label}")
+    print(f"interval_seconds: {spec.interval_seconds}")
+    print("To start it now, run:")
+    print(f"launchctl bootstrap gui/$(id -u) {path}")
+    print("To stop it later, run:")
+    print(f"launchctl bootout gui/$(id -u) {path}")
+    return 0
+
+
+def cmd_service_status(args: argparse.Namespace) -> int:
+    store = _store(args)
+    metadata = read_service_metadata(store.state_dir)
+    if args.json:
+        print(json.dumps(metadata or {"installed": False}, indent=2, ensure_ascii=False))
+        return 0
+    if not metadata:
+        print("SkillLoop service: not installed")
+        return 0
+    path = Path(str(metadata.get("path", ""))).expanduser()
+    print("SkillLoop service: installed")
+    print(f"kind: {metadata.get('kind')}")
+    print(f"label: {metadata.get('label')}")
+    print(f"path: {path}")
+    print(f"plist_exists: {path.exists()}")
+    print(f"interval_seconds: {metadata.get('interval_seconds')}")
+    print(f"command: {' '.join(str(part) for part in metadata.get('command', []))}")
+    return 0
+
+
+def cmd_service_uninstall(args: argparse.Namespace) -> int:
+    store = _store(args)
+    removed = remove_launchd_service(state_dir=store.state_dir, launch_agents_dir=args.launch_agents_dir)
+    if not removed:
+        print("No SkillLoop service files found.")
+        return 0
+    for path in removed:
+        print(f"removed {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SkillLoop: clean learning/export layer for agent traces")
     parser.add_argument("--path", default=".", help="Project root for .skillloop state (default: current directory)")
@@ -637,6 +699,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_controller_show = controller_sub.add_parser("show", help="Show a stored controller run by full id or unique prefix")
     p_controller_show.add_argument("run_id")
     p_controller_show.set_defaults(func=cmd_controller_show)
+
+    p_service = sub.add_parser("service", help="Install, inspect, and remove the local background controller service")
+    service_sub = p_service.add_subparsers(dest="service_command", required=True)
+    p_service_install = service_sub.add_parser("install", help="Write a platform service definition for recurring controller ticks")
+    p_service_install.add_argument("--kind", choices=["launchd"], default=None, help="Service kind (default: launchd on macOS)")
+    p_service_install.add_argument("--interval-seconds", type=int, default=3600, help="Controller tick interval in seconds")
+    p_service_install.add_argument("--label", default=None, help="Override generated service label")
+    p_service_install.add_argument("--launch-agents-dir", default=None, help="Override LaunchAgents directory, mainly for tests")
+    p_service_install.set_defaults(func=cmd_service_install)
+    p_service_status = service_sub.add_parser("status", help="Show recorded service installation metadata")
+    p_service_status.add_argument("--json", action="store_true")
+    p_service_status.set_defaults(func=cmd_service_status)
+    p_service_uninstall = service_sub.add_parser("uninstall", help="Remove recorded service files")
+    p_service_uninstall.add_argument("--launch-agents-dir", default=None, help="Override LaunchAgents directory, mainly for tests")
+    p_service_uninstall.set_defaults(func=cmd_service_uninstall)
 
     return parser
 
