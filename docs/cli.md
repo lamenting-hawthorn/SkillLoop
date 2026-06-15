@@ -1,15 +1,15 @@
 # CLI Reference
 
-All commands accept a global `--path` argument. The path selects the project root where SkillLoop stores local state.
-
-```bash
-python -m skillloop.cli --path . <command>
-```
-
-After installation, the `skillloop` console script is equivalent:
+All commands accept the global `--path` argument. The path selects the project root where SkillLoop stores local state.
 
 ```bash
 skillloop --path . <command>
+```
+
+Equivalent module form:
+
+```bash
+python -m skillloop.cli --path . <command>
 ```
 
 ## `init`
@@ -28,23 +28,32 @@ Creates:
 
 ## `setup`
 
-Configures SkillLoop as a local sidecar for Hermes by writing `.skillloop/policy.json` with `hermes-db` ingestion. With `--start`, it immediately runs one controller tick.
+Configures SkillLoop as a local sidecar for Hermes by writing `.skillloop/policy.json` with read-only `hermes-db` ingestion. With `--start`, it immediately runs one controller tick.
 
 ```bash
 skillloop --path . setup --connect hermes --start
-skillloop --path . setup --connect hermes --db-path ~/.hermes/state.db --max-sessions 20 --auto-export
+skillloop --path . setup --connect hermes --db-path ~/.hermes/state.db --max-sessions 20 --min-score 70 --auto-export --dataset-out data/sft.jsonl --start
 ```
 
-This is read-only against Hermes `state.db`; SkillLoop writes only under the selected `--path` root.
+Important behavior:
+
+- validates that `--db-path` exists
+- validates positive `--max-sessions`
+- validates `--min-score` in `0..100`
+- writes a conservative `.skillloop/policy.json`
+- reads Hermes `state.db` only; it does not mutate Hermes
+- `--auto-export` enables controller-managed SFT export
 
 ## `status`
 
-Shows configured policy path, trace/evaluation/proposal counts, and the latest controller run.
+Shows configured policy path, trace/evaluation/proposal counts, dataset stats, and the latest controller run.
 
 ```bash
 skillloop --path . status
 skillloop --path . status --json
 ```
+
+If a dataset manifest exists but cannot be decoded, status reports a manifest error instead of throwing a raw traceback.
 
 ## `ingest generic`
 
@@ -54,7 +63,7 @@ Ingests a generic JSONL trace.
 skillloop --path . ingest generic examples/traces/simple_trace.jsonl
 ```
 
-Each line should contain a message-like object. The adapter tolerates unknown fields.
+Each line should contain a message-like object. Unknown fields are tolerated. Common secret patterns are redacted.
 
 ## `ingest hermes`
 
@@ -68,7 +77,7 @@ The adapter normalizes known message and tool-call fields into the internal sche
 
 ## `ingest hermes-db`
 
-Ingests directly from a Hermes `state.db` file using SQLite read-only mode. This reads session messages but does not mutate Hermes state.
+Ingests directly from a Hermes `state.db` file using read-only SQLite access.
 
 ```bash
 skillloop --path . ingest hermes-db --latest
@@ -92,7 +101,7 @@ Shows a specific trace or the latest trace.
 
 ```bash
 skillloop --path . traces show latest
-skillloop --path . traces show <trace-id>
+skillloop --path . traces show <trace-id-or-prefix>
 ```
 
 ## `eval`
@@ -101,9 +110,11 @@ Evaluates a trace and stores an `Evaluation` record.
 
 ```bash
 skillloop --path . eval latest
-skillloop --path . eval <trace-id>
+skillloop --path . eval <trace-id-or-prefix>
 skillloop --path . eval latest --evaluator rubric
 ```
+
+Current evaluators are deterministic and local. Use `benchmark` to compare evaluator behavior across stored traces.
 
 ## `distill`
 
@@ -111,16 +122,20 @@ Creates memory and skill proposals from a trace.
 
 ```bash
 skillloop --path . distill latest
-skillloop --path . distill <trace-id>
+skillloop --path . distill <trace-id-or-prefix>
 ```
+
+Distillation writes proposals to the review queue. It does not mutate Hermes or global agent state.
 
 ## `review list`
 
-Lists pending proposals.
+Lists proposals.
 
 ```bash
 skillloop --path . review list
 skillloop --path . review list --verbose
+skillloop --path . review list --all
+skillloop --path . review list --status approved
 ```
 
 ## `review approve`
@@ -145,6 +160,7 @@ Writes approved proposals into project-local approved export files.
 
 ```bash
 skillloop --path . apply
+skillloop --path . apply --out-dir .skillloop/approved
 ```
 
 Writes to:
@@ -153,6 +169,8 @@ Writes to:
 .skillloop/approved/memory/*.md
 .skillloop/approved/skill/*.md
 ```
+
+This is an export boundary, not live runtime mutation.
 
 ## `export sft`
 
@@ -165,9 +183,11 @@ skillloop --path . export sft --out data/sft.jsonl --splits train=0.8,validation
 skillloop --path . export sft --out data/sft.jsonl --manifest-out data/manifest.json
 ```
 
-Use `--min-score N` to export only traces with a stored evaluation score greater than or equal to `N`. Traces without evaluations are skipped when this gate is active.
+Use `--min-score N` to export only traces with at least one stored evaluation score greater than or equal to `N`. Traces without evaluations are skipped when this gate is active.
 
-Exports always write a dataset manifest. By default the manifest path is `<out>.manifest.json`; pass `--manifest-out` to choose a path. The manifest includes output file paths, export metadata, split-level record/token stats, trace/evaluation/proposal provenance summaries, and evaluator counts.
+Exports always write a dataset manifest. By default the manifest path is `<out>.manifest.json`; pass `--manifest-out` to choose a path.
+
+The manifest includes output file paths, export metadata, split-level record/token stats, trace/evaluation/proposal provenance summaries, and evaluator counts.
 
 Use `--splits` to write deterministic split files. For example `--splits train=0.8,validation=0.1,test=0.1` writes `data/sft.train.jsonl`, `data/sft.validation.jsonl`, and `data/sft.test.jsonl`.
 
@@ -187,6 +207,8 @@ skillloop --path . export dpo --out data/dpo.jsonl --min-score 70
 skillloop --path . export dpo --out data/dpo.jsonl --splits train=0.9,test=0.1
 ```
 
+DPO export is conservative in v1 and only exports explicit preference pairs already present in trace metadata.
+
 Record shape:
 
 ```json
@@ -195,13 +217,15 @@ Record shape:
 
 ## `benchmark`
 
-Replays stored traces through evaluator versions and writes a report that compares scores, deltas, tags, and evidence counts. Use this before training to prove an evaluator change is at least non-regressing on a small trace suite.
+Replays stored traces through evaluator versions and writes a report comparing scores, deltas, tags, and evidence counts.
 
 ```bash
 skillloop --path . benchmark
 skillloop --path . benchmark --baseline rubric_legacy --candidates rubric --out data/benchmark.json
 skillloop --path . benchmark --trace-id latest --out data/latest-benchmark.json
 ```
+
+Use this before trusting an evaluator change for dataset export or training data readiness.
 
 Report shape:
 
@@ -211,7 +235,7 @@ Report shape:
 
 ## `training-config`
 
-Generates training configuration artifacts for Unsloth, TRL, or Axolotl from a dataset manifest. This command does not run training. Generated files include explicit safety metadata showing `training_auto_run: false` / `training_auto_run=false` equivalent fields.
+Generates training configuration artifacts for Unsloth, TRL, or Axolotl from a dataset manifest. This command does not run training.
 
 ```bash
 skillloop --path . training-config trl --dataset-manifest data/sft.jsonl.manifest.json --base-model NousResearch/Meta-Llama-3.1-8B --output-dir runs/trl-sft --config-dir configs/trl
@@ -227,6 +251,36 @@ configs/unsloth/unsloth_config.json
 configs/unsloth/unsloth_sft_skeleton.py
 configs/axolotl/axolotl_config.yml
 ```
+
+Generated configs include explicit no-auto-run safety metadata.
+
+## `loop run`
+
+Runs one local outer-loop evaluation/distillation pass.
+
+```bash
+skillloop --path . loop run
+skillloop --path . loop run --min-score 80
+skillloop --path . loop run --require-tag success_signal --forbid-tag tool_failure
+skillloop --path . loop run --condition '{"score_gte":80,"forbidden_tags":["tool_failure"]}'
+```
+
+## `loop schedule/status/tick`
+
+Writes and executes a project-local loop schedule. This is a local scheduling primitive, not an installed OS background service.
+
+```bash
+skillloop --path . loop schedule --interval daily --min-score 70
+skillloop --path . loop status
+skillloop --path . loop tick
+skillloop --path . loop tick --force
+```
+
+Supported intervals:
+
+- `hourly`
+- `daily`
+- `weekly`
 
 ## `controller run/history/show`
 
@@ -259,3 +313,5 @@ test -s "$tmp/sft.jsonl.manifest.json"
 test -s "$tmp/benchmark.json"
 echo "$tmp"
 ```
+
+The final `echo` prints the temporary directory so the artifacts can be inspected manually.

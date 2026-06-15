@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "skillloop"
 version = "0.1.0"
-description = "A self-improving agent harness for memory, skills, evaluation, and fine-tuning data."
+description = "A proprietary local learning governor for agent traces, evaluation, proposals, and training-data preparation."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "Apache-2.0"}
+license = {text = "Proprietary - All Rights Reserved"}
 authors = [{name = "Raghav"}]
 dependencies = []
 

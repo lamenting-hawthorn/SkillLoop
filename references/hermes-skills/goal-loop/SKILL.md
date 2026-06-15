@@ -3,7 +3,7 @@ name: goal-loop
 description: "The /goal pattern: cron jobs that run until an objective condition is met, checked by an independent model (maker/checker split). Source: loop engineering framework by 0xCodez / Anthropic evaluator-optimizer pattern."
 version: 1.0.0
 author: Hermes Agent
-license: MIT
+license: Proprietary - All Rights Reserved
 metadata:
   hermes:
     tags: [loop-engineering, cron, goal, automation, maker-checker, evaluator-optimizer]
