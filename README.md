@@ -315,18 +315,21 @@ See `docs/safety.md` for details.
 - memory/skill proposals
 - review/apply lifecycle
 - dataset exports and manifests
-- replay benchmark reports
+- benchmark reports
 - training config generation
 - Hermes setup/status/controller run UX
 - persisted controller run history
+- macOS launchd service plist generation
+- controller-managed dataset auto-export behind explicit policy gates
 
 ### Next product steps
 
-1. Add a real background service runner (`launchd` first, then Linux systemd/cron).
-2. Add dataset readiness judging before any training plan or training runner.
-3. Add evaluator staleness detection when evaluator component hashes change.
-4. Add stronger evidence-trust scoring so exports learn from verified work, not claims.
-5. Add training planner artifacts, still approval-gated and no auto-run.
+0. Run a local real-system smoke test against this machine's Hermes `state.db` in an isolated SkillLoop project. Verify `setup --connect hermes --start`, `status`, `controller history/show`, `service install/status/uninstall`, and generated dataset manifests before loading any persistent service.
+1. Build the P1 dataset readiness judge before any training plan or training runner. It should read dataset manifests and return `ready`, `collect_more_data`, or `blocked` with machine-readable reasons.
+2. Add evaluator staleness detection when evaluator component hashes change, so controller-managed datasets do not depend on outdated scores.
+3. Add stronger evidence-trust scoring so exports learn from verified work, not assistant claims.
+4. Add approval-gated training planner artifacts after readiness/staleness gates exist.
+5. Add Linux service generation (`systemd` unit or cron) after the macOS launchd path has real local use.
 
 ## Development checks
 

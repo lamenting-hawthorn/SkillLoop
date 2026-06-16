@@ -222,8 +222,9 @@ This boundary is deliberate: it keeps the learning layer inspectable, reviewable
 
 ## Roadmap priorities
 
+0. Run a local real-system smoke test against this machine's Hermes `state.db` in an isolated SkillLoop project. Verify controller ticks, status/history/show, launchd plist generation, service uninstall, and dataset manifest generation before loading any persistent service.
 1. Add a dataset readiness judge before any training plan is recommended.
 2. Add evaluator staleness detection when evaluator code/provenance changes.
 3. Add stronger evidence-trust scoring so learning artifacts depend on tool/user evidence rather than assistant claims.
-4. Add Linux service generation (`systemd` unit or cron) after the macOS launchd path has had real local use.
-5. Add approval-gated training plans; keep training execution separate until readiness, cost, evaluation, and promotion gates exist.
+4. Add approval-gated training plans; keep training execution separate until readiness, cost, evaluation, and promotion gates exist.
+5. Add Linux service generation (`systemd` unit or cron) after the macOS launchd path has had real local use.

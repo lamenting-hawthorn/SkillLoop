@@ -20,6 +20,7 @@ class ServiceSpec:
     state_dir: Path
     interval_seconds: int = DEFAULT_INTERVAL_SECONDS
     python_executable: str = sys.executable
+    python_path: str | None = None
 
     @property
     def stdout_path(self) -> Path:
@@ -58,6 +59,7 @@ def build_service_spec(
         state_dir=state,
         interval_seconds=interval_seconds,
         python_executable=python_executable or sys.executable,
+        python_path=str(Path(__file__).resolve().parents[1]),
     )
 
 
@@ -80,6 +82,7 @@ def launchd_plist(spec: ServiceSpec) -> dict[str, Any]:
         "StandardErrorPath": str(spec.stderr_path),
         "EnvironmentVariables": {
             "PYTHONUNBUFFERED": "1",
+            **({"PYTHONPATH": spec.python_path} if spec.python_path else {}),
         },
     }
 
@@ -121,6 +124,7 @@ def write_service_metadata(spec: ServiceSpec, *, kind: str, path: str | Path) ->
             "controller",
             "run",
         ],
+        "python_path": spec.python_path,
     }
     spec.metadata_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return spec.metadata_path

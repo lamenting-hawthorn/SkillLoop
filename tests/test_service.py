@@ -31,6 +31,8 @@ def test_launchd_plist_runs_controller_tick(tmp_path):
         "controller",
         "run",
     ]
+    assert payload["EnvironmentVariables"]["PYTHONUNBUFFERED"] == "1"
+    assert payload["EnvironmentVariables"]["PYTHONPATH"]
 
 
 def test_service_install_status_and_uninstall_cli(tmp_path, capsys):
@@ -57,6 +59,7 @@ def test_service_install_status_and_uninstall_cli(tmp_path, capsys):
     assert metadata["kind"] == "launchd"
     assert metadata["label"] == "com.skillloop.test"
     assert metadata["path"] == str(plist_path)
+    assert metadata["python_path"]
 
     assert main(["--path", str(tmp_path), "service", "status"]) == 0
     assert main(["--path", str(tmp_path), "service", "status", "--json"]) == 0
