@@ -8,6 +8,7 @@ from typing import Any
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
 from skillloop.adapters.hermes import list_hermes_state_sessions, load_hermes_state_db
 from skillloop.dataset import build_manifest, parse_split_spec, split_records, write_jsonl, write_manifest
+from skillloop.dataset_readiness import assess_dataset_readiness
 from skillloop.export.dpo import export_dpo_records
 from skillloop.export.sft import export_sft_records
 from skillloop.fs_safety import ensure_not_symlink_escape, resolve_under_root, safe_path_segment
@@ -151,6 +152,11 @@ def export_dataset_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -
 
     split_spec = parse_split_spec(dataset.splits)
     split_map = split_records(records, split_spec)
+    readiness = assess_dataset_readiness(
+        split_records_map=split_map,
+        source_traces=traces,
+        evaluations_by_trace=evaluations,
+    )
     out = resolve_under_root(store.root, dataset.out, label="controller dataset output")
     output_files: dict[str, Path] = {}
     if len(split_map) == 1 and "train" in split_map:
@@ -172,6 +178,7 @@ def export_dataset_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -
             "controller_managed": True,
             "auto_update": dataset.auto_update,
             "condition": policy.evaluation.condition.to_dict(),
+            "readiness": readiness.to_dict(),
         },
     )
     manifest_path = out.with_suffix(out.suffix + ".manifest.json")
@@ -182,6 +189,7 @@ def export_dataset_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -
         "estimated_tokens": manifest.estimated_tokens,
         "output_files": {name: str(path) for name, path in output_files.items()},
         "manifest": str(manifest_path),
+        "readiness": readiness.to_dict(),
     }
 
 

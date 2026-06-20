@@ -34,8 +34,11 @@ def test_controller_tick_ingests_evaluates_exports_and_records_report(tmp_path):
     assert report.actions[1]["type"] == "evaluate"
     assert report.actions[2]["type"] == "dataset_export"
     assert report.actions[2]["records"] == 1
+    assert report.actions[2]["readiness"]["ready"] is False
     assert (tmp_path / "data" / "sft.train.jsonl").exists()
     assert (tmp_path / "data" / "sft.jsonl.manifest.json").exists()
+    manifest = json.loads((tmp_path / "data" / "sft.jsonl.manifest.json").read_text())
+    assert manifest["export_metadata"]["readiness"]["ready"] is False
     run_files = list((tmp_path / ".skillloop" / "controller_runs").glob("*.json"))
     assert len(run_files) == 1
     saved = json.loads(run_files[0].read_text())
