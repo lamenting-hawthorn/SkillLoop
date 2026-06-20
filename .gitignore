@@ -26,3 +26,4 @@ data/*.jsonl
 venv/
 .worktrees/
 docs/HANDOFF.md
+repo_structure.txt

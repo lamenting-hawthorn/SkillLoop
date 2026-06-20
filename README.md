@@ -1,65 +1,154 @@
 # SkillLoop
 
-SkillLoop is a local-first learning governor for AI agent runtimes.
+**A governed learning layer for AI agents.**
 
-It sits beside an agent runtime, reads completed execution traces, evaluates what happened, proposes durable learning artifacts, and exports reviewed datasets for later model improvement. It does not replace the runtime and it does not silently mutate global agent state.
+SkillLoop turns agent execution traces into reviewed memories, reusable workflows,
+training datasets, and evidence-backed improvement signals. It is built for the
+gap between "an agent did work" and "the system should safely learn from that
+work."
 
-Current primary integration: Hermes Agent via read-only ingestion from `~/.hermes/state.db`.
+Most agent systems can execute tasks. Fewer can answer:
 
-> Status: proof-of-work / early local sidecar. The project now has the core trace -> evaluation -> proposal -> review -> export pipeline, plus Hermes setup/status/controller UX. It is not yet a fully unattended production daemon and it does not run training.
+- What actually happened?
+- Was the outcome supported by evidence?
+- Which lessons are durable enough to remember?
+- Which workflows should become reusable skills?
+- Which traces are safe enough to become training data?
+- What must stay behind human approval?
 
-## Why SkillLoop exists
+SkillLoop makes that loop explicit.
 
-Agents already execute work. The missing layer is governed learning:
+It runs as a local sidecar beside an agent runtime, ingests completed traces,
+normalizes them, evaluates them, proposes learning artifacts, gates those
+artifacts through review, and prepares datasets/configs for future model
+improvement.
 
-- What did the agent do?
-- Was the result actually supported by evidence?
-- What should be remembered?
-- Which workflows are reusable?
-- Which traces are safe and useful for training data?
-- What needs human approval before becoming permanent?
+Current first-class integration: **Hermes Agent** through read-only ingestion
+from `~/.hermes/state.db`.
 
-SkillLoop keeps this loop explicit, reviewable, and project-local.
+The architecture is runtime-agnostic: Hermes is the first adapter, not the only
+possible runtime.
+
+> **Status:** early local sidecar / proof-of-work. The core
+> `trace -> evaluation -> proposal -> review -> export` pipeline is implemented,
+> with Hermes setup/status/controller UX, controller run history, dataset export,
+> training config generation, and macOS launchd plist generation. SkillLoop is
+> not yet a fully unattended production daemon and does not run training.
+
+## Why This Project Matters
+
+Agents are starting to accumulate operational experience: tool calls, failures,
+corrections, successful workflows, user preferences, project conventions, and
+domain-specific procedures.
+
+The hard part is not simply storing more context. The hard part is deciding what
+should become durable system knowledge.
+
+SkillLoop treats learning as a governed pipeline:
+
+```text
+runtime traces
+  -> normalized trace records
+  -> deterministic evaluation
+  -> evidence extraction
+  -> memory / skill proposals
+  -> human review
+  -> approved local exports
+  -> dataset and training-config preparation
+```
+
+This gives an agent system a safer path from experience to improvement without
+silently mutating global memory, skills, prompts, or model state.
+
+## Core Idea
+
+SkillLoop separates three responsibilities that are often blended together:
+
+```text
+Agent runtime   = executes work and records sessions
+SkillLoop       = evaluates traces and governs learning
+Memory / models = durable downstream systems updated only through policy gates
+```
 
 ```mermaid
 flowchart LR
-    Runtime[Agent runtime\nHermes / JSONL export] --> Ingest[Read-only ingestion]
+    User[User] --> Runtime[Agent runtime\nHermes today, other runtimes later]
+    Runtime -->|completed sessions and tool traces| SkillLoop[SkillLoop\nlearning governor]
+    SkillLoop -->|reviewed memory candidates| Memory[Typed memory backend\nsemantic / episodic / procedural]
+    SkillLoop -->|reviewed examples| Dataset[Training datasets\nSFT / DPO]
+    SkillLoop -->|safe config artifacts| Training[Training configs\nTRL / Unsloth / Axolotl]
+    SkillLoop -->|run summaries| Reports[Controller reports\nstatus, evidence, provenance]
+```
+
+In the current implementation, SkillLoop stores local governor state in
+`.skillloop/`. It can read Hermes sessions, but it does not write into Hermes
+memory, skills, config, cron jobs, tools, or model state.
+
+That boundary is the product.
+
+## Architecture
+
+The central lifecycle is deliberately review-gated:
+
+```mermaid
+flowchart LR
+    Trace[Completed agent trace] --> Evidence[Evidence extraction]
+    Evidence --> Evaluation[Evaluation\nscore, tags, provenance]
+    Evaluation --> Proposal[Learning proposal\nmemory or skill]
+    Proposal --> Review[Human review]
+    Review -->|approve| Durable[Approved learning artifact]
+    Review -->|reject| Archive[Rejected / ignored]
+    Durable --> Export[Local export or future approved write]
+```
+
+```mermaid
+flowchart LR
+    Runtime[Agent runtime\nHermes / JSONL / future adapters] --> Ingest[Read-only ingestion]
     Ingest --> Trace[Normalized AgentTrace]
     Trace --> Store[(Project-local SQLite)]
-    Store --> Eval[Deterministic evaluation\nwith evidence]
-    Eval --> Distill[Memory + skill proposal\ndistillation]
+    Store --> Eval[Deterministic evaluation\nscore + evidence]
+    Eval --> Distill[Learning distillation\nmemory + skill proposals]
     Distill --> Review[Human review queue]
     Review -->|approve| Apply[Project-local approved exports]
     Review -->|reject| Reject[Rejected proposal]
     Store --> Dataset[SFT / DPO dataset export]
-    Dataset --> Manifest[Dataset manifest\ncounts, splits, provenance]
-    Manifest --> Config[Training config generation\nUnsloth / TRL / Axolotl]
+    Dataset --> Manifest[Dataset manifest\nsplits, counts, provenance]
+    Manifest --> Config[Training config generation\nTRL / Unsloth / Axolotl]
 ```
 
-## Current capabilities
+The controller turns the manual pipeline into one governed local tick:
 
-### Trace ingestion
+```text
+ingest -> evaluate -> distill -> optional dataset export -> report
+```
+
+Controller reports are stored in SQLite and mirrored as JSON under
+`.skillloop/controller_runs/`.
+
+## What Works Today
+
+### Runtime Trace Ingestion
 
 SkillLoop can ingest:
 
 - generic JSONL message traces
 - Hermes-style JSON exports
-- Hermes `state.db` sessions through a read-only SQLite connection
-- incremental Hermes DB sessions through controller policy (`max_sessions`, unseen-session filtering)
+- Hermes `state.db` sessions through read-only SQLite access
+- incremental Hermes DB sessions using unseen-session filtering
 
-All traces are normalized into a stable `AgentTrace` schema with:
+All inputs are normalized into a stable `AgentTrace` schema with:
 
-- schema version
-- runtime metadata
-- adapter metadata
-- message list
+- runtime and adapter metadata
+- message history
 - span-ready tool call metadata
-- raw artifact reference
+- raw artifact references
 - raw and normalized content hashes
+- schema versioning
 
-### Evaluation
+### Deterministic Evaluation
 
-The evaluator is deterministic and local. It scores traces using observable signals such as:
+The current evaluator is local and deterministic. It scores traces using
+observable signals such as:
 
 - final answer presence
 - tool failures and error signals
@@ -67,13 +156,21 @@ The evaluator is deterministic and local. It scores traces using observable sign
 - user correction signals
 - structured evidence summaries
 
-Evaluations carry evaluator name/version, trace schema version, source hashes, evidence, and tags.
+Evaluations carry evaluator name/version, trace schema version, source hashes,
+evidence, tags, and provenance.
 
-### Distillation and proposal lifecycle
+This is intentionally not an LLM judge yet. LLM-based evaluation should wait
+until cost tracking, evidence trust, and budget policy exist.
 
-SkillLoop currently creates memory and skill proposals from traces. It does not directly write memories or skills into Hermes.
+### Proposal Distillation
 
-Proposal lifecycle:
+SkillLoop distills traces into candidate learning artifacts:
+
+- memory proposals for durable facts, preferences, corrections, and conventions
+- skill proposals for reusable workflows and procedures
+
+Distillation does not directly mutate runtime memory or skills. It writes
+reviewable proposals.
 
 ```mermaid
 stateDiagram-v2
@@ -85,16 +182,22 @@ stateDiagram-v2
     applied --> [*]
 ```
 
-Approved proposals are exported locally under `.skillloop/approved/`.
+Approved artifacts are currently exported locally under:
 
-### Dataset export
+```text
+.skillloop/approved/memory/*.md
+.skillloop/approved/skill/*.md
+```
 
-SkillLoop exports:
+### Dataset Export
+
+SkillLoop can export reviewed training-data candidates:
 
 - SFT JSONL records: `{ "messages": [...] }`
 - DPO JSONL records: `{ "prompt": ..., "chosen": ..., "rejected": ... }`
 
-DPO export is conservative: it only exports explicit chosen/rejected pairs already present in trace metadata.
+DPO export is conservative: it only exports explicit chosen/rejected pairs that
+already exist in trace metadata.
 
 Dataset export supports:
 
@@ -102,51 +205,63 @@ Dataset export supports:
 - deterministic train/validation/test splits
 - manifests
 - source trace IDs
-- evaluation/proposal provenance summaries
+- evaluation provenance
+- proposal provenance summaries
 - estimated token counts
 
-### Training config generation
+### Training Config Generation
 
-SkillLoop can generate reviewed training configuration artifacts for:
+SkillLoop can generate training configuration artifacts for:
 
 - TRL
 - Unsloth
 - Axolotl
 
-It does not run training. Generated configs carry explicit `auto_run=false`-style safety metadata.
+It does not run training. Generated configs carry explicit no-auto-run safety
+metadata.
 
-### Controller and setup UX
+### Controller and Local Service UX
 
-The controller turns the manual pipeline into one governed tick:
-
-```text
-ingest -> evaluate -> distill -> optional dataset export -> report
-```
-
-Available controller UX:
+Available controller/admin commands include:
 
 - `skillloop setup --connect hermes --start`
 - `skillloop status`
 - `skillloop controller run`
 - `skillloop controller history`
 - `skillloop controller show <run-id-or-prefix>`
-- `skillloop service install/status/uninstall` for launchd-backed recurring controller ticks on macOS
+- `skillloop service install/status/uninstall`
 
-Controller run reports are stored in SQLite and mirrored as JSON under `.skillloop/controller_runs/`.
+On macOS, service installation writes project-specific launchd plists and
+records `.skillloop/service.json`. It prints the exact `launchctl` commands
+instead of silently starting OS services.
 
-Background service installation currently writes project-specific launchd plists and records `.skillloop/service.json`; it prints the exact `launchctl` commands rather than silently starting OS services.
+## Safety Model
 
-## What SkillLoop intentionally does not do yet
+SkillLoop is intentionally conservative.
 
-- It does not replace Hermes or any other runtime.
-- It does not write into `~/.hermes/memories`, `~/.hermes/skills`, or global agent config.
-- It does not auto-apply proposals.
-- It does not auto-promote prompts, models, or skills.
-- It does not run fine-tuning.
-- It does not store credentials.
-- It does not require cloud services.
+It does:
 
-## Install for local development
+- keep state local under `.skillloop/`
+- read Hermes `state.db` without mutating it
+- redact common secret patterns during ingestion/export
+- require review before apply
+- generate dataset manifests with provenance
+- generate training configs without running training
+
+It does not:
+
+- replace Hermes or any other runtime
+- write into `~/.hermes/memories`, `~/.hermes/skills`, or global config
+- auto-apply memory, skill, prompt, or model changes
+- auto-promote trained models
+- run fine-tuning
+- store credentials
+- require cloud services
+
+This keeps SkillLoop useful as a local learning governor without turning it into
+an uncontrolled mutation layer.
+
+## Quickstart
 
 SkillLoop requires Python 3.11+.
 
@@ -156,7 +271,7 @@ cd skillloop
 python -m pip install -e '.[dev]'
 ```
 
-After installation, use either:
+You can run the CLI as either:
 
 ```bash
 python -m skillloop.cli --path . <command>
@@ -168,7 +283,7 @@ or:
 skillloop --path . <command>
 ```
 
-## Quickstart: local sample trace
+### Try the Local Sample Trace
 
 ```bash
 skillloop --path . init
@@ -188,27 +303,23 @@ skillloop --path . review approve <proposal-id-or-prefix>
 skillloop --path . apply
 ```
 
-Approved artifacts are written to:
-
-```text
-.skillloop/approved/memory/*.md
-.skillloop/approved/skill/*.md
-```
-
-## Quickstart: Hermes sidecar setup
+### Use SkillLoop as a Hermes Sidecar
 
 ```bash
 skillloop --path . setup --connect hermes --start
 skillloop --path . status
 skillloop --path . controller history
 skillloop --path . controller show <run-id-or-prefix>
+```
+
+Optional macOS service metadata/plist generation:
+
+```bash
 skillloop --path . service install --kind launchd --interval-seconds 3600
 skillloop --path . service status
 ```
 
-This creates `.skillloop/policy.json` with read-only Hermes DB ingestion and runs one controller tick when `--start` is provided.
-
-Useful options:
+Useful setup options:
 
 ```bash
 skillloop --path . setup --connect hermes \
@@ -220,9 +331,10 @@ skillloop --path . setup --connect hermes \
   --start
 ```
 
-`--auto-export` enables controller-managed SFT export (`dataset.auto_update: true`), still bounded by the configured evaluation condition and score gate.
+`--auto-export` enables controller-managed SFT export, still bounded by the
+configured evaluation condition and score gate.
 
-## CLI overview
+## CLI Overview
 
 ```text
 skillloop --path <project-root> init
@@ -263,7 +375,7 @@ skillloop --path <project-root> controller show <run-id-or-prefix>
 
 See `docs/cli.md` for the full command reference.
 
-## Repository layout
+## Repository Layout
 
 ```text
 skillloop/
@@ -273,13 +385,17 @@ skillloop/
   eval/              Deterministic evaluators, registry, structured evidence
   export/            SFT and DPO dataset exporters
   review/            Proposal review queue helpers
+  benchmark.py       Replay benchmark comparing evaluator versions
+  cli.py             Command-line interface
   conditions.py      Declarative done/stopped/failing conditions
   controller.py      Policy-driven ingest/eval/distill/export tick
   dataset.py         Dataset split, manifest, provenance, and stats helpers
   loop.py            Outer-loop scheduling primitives
   policy.py          Conservative controller policy schema
   provenance.py      Component provenance and source hashing
+  sanitize.py        Secret redaction
   schema.py          Normalized trace/evaluation/proposal dataclasses
+  service.py         Launchd service metadata/plist generation
   store.py           SQLite persistence layer
   training_config.py Training config generation only
 examples/
@@ -289,49 +405,102 @@ references/          Reference Hermes skills and analysis artifacts
 tests/               Pytest coverage
 ```
 
-## Safety and governance model
+## Current Roadmap
 
-SkillLoop is intentionally conservative:
+SkillLoop is not trying to become a second agent runtime. The next work is about
+making the learning layer more useful, safer, and more evidence-grounded.
 
-- local-first state under `.skillloop/`
-- read-only integration with Hermes `state.db`
-- no credential storage
-- common secret redaction during ingestion/export
-- proposal review before apply
-- project-local approved exports only
-- dataset manifests with provenance
-- generated training configs only; no training runner
-- no global Hermes mutation in v1
+### 1. Typed-Memory Connector
 
-See `docs/safety.md` for details.
+The next architecture direction is a connector for a canonical typed-memory
+backend.
 
-## Current roadmap
+This is also the bridge to a broader companion agent architecture: SkillLoop
+stays focused on evaluation, evidence, proposal generation, and governance,
+while durable memory belongs in a typed memory system with semantic, episodic,
+and procedural records. That keeps the project modular instead of turning
+SkillLoop into a runtime, database, and memory platform all at once.
 
-### P0 complete / current base
+Planned flow:
 
-- core trace ingestion and normalized schema
-- local SQLite store
-- deterministic evaluator and evidence records
-- memory/skill proposals
-- review/apply lifecycle
-- dataset exports and manifests
-- benchmark reports
-- training config generation
-- Hermes setup/status/controller run UX
-- persisted controller run history
-- macOS launchd service plist generation
-- controller-managed dataset auto-export behind explicit policy gates
-- real-system smoke verified against local Hermes `state.db` with isolated service install/uninstall
+```text
+runtime traces
+  -> SkillLoop evaluation
+  -> classify learning as semantic / episodic / procedural
+  -> search existing typed memory for duplicates or conflicts
+  -> create review-gated memory proposals
+  -> export approved memory candidates locally
+  -> optionally apply approved writes through an explicit command
+```
 
-### Next product steps
+Initial mode should be read-only. Approved writes should require an explicit
+apply command. Database credentials should be referenced through environment
+variables, never stored in SkillLoop policy.
 
-1. Build the P1 dataset readiness judge before any training plan or training runner. It should read dataset manifests and return `ready`, `collect_more_data`, or `blocked` with machine-readable reasons.
-2. Add evaluator staleness detection when evaluator component hashes change, so controller-managed datasets do not depend on outdated scores.
-3. Add stronger evidence-trust scoring so exports learn from verified work, not assistant claims.
-4. Add approval-gated training planner artifacts after readiness/staleness gates exist.
-5. Add Linux service generation (`systemd` unit or cron) after the macOS launchd path has more real local use.
+### 2. Dataset Readiness Judge
 
-## Development checks
+Before training is proposed, SkillLoop should judge whether a dataset is ready.
+
+The judge should inspect manifests and return one of:
+
+- `ready`
+- `collect_more_data`
+- `blocked`
+
+with machine-readable reasons based on record count, token count, split quality,
+score distribution, duplicate risk, and secret-scan results.
+
+### 3. Evaluator Staleness and Evidence Trust
+
+Controller-managed datasets should not depend on stale scores. SkillLoop should
+detect evaluator component changes and flag old evaluations for refresh.
+
+The evaluator should also separate verified evidence from assistant claims, so
+exports learn from actual outcomes rather than optimistic text.
+
+### 4. Training Planner
+
+Training plans should come after readiness, staleness, and evidence-trust gates.
+
+The planner should generate reviewable artifacts describing:
+
+- target library
+- base model
+- dataset manifest
+- hyperparameters
+- output paths
+- expected cost/time/hardware assumptions
+- approval requirements
+
+Actual training should remain manual/approved at first.
+
+### 5. Operational Hardening
+
+Planned hardening includes:
+
+- Linux service generation
+- SQLite migrations
+- stronger indexes
+- cost tracking before LLM evaluators
+- stronger redaction and privacy checks
+- more robust trace failure recovery
+
+## Known Limitations
+
+SkillLoop is early and intentionally conservative.
+
+- The current evaluator is deterministic and heuristic-based.
+- Distillation is useful but still basic.
+- DPO export only works when explicit preference pairs exist in trace metadata.
+- The project does not yet include a typed-memory connector.
+- The project does not yet include a dataset readiness judge.
+- Linux service generation is not implemented yet.
+- Redaction is a safety net, not a complete DLP system.
+- Training configs can be generated, but training does not run automatically.
+
+These are design constraints, not hidden claims.
+
+## Development Checks
 
 ```bash
 python -m pytest -q
@@ -342,14 +511,16 @@ python -m pip wheel . --no-deps -w /tmp/skillloop-wheel-check
 
 ## Documentation
 
-- `docs/architecture.md` — system architecture and module responsibilities
-- `docs/cli.md` — command reference and smoke test
-- `docs/safety.md` — safety boundaries and threat model
-- `docs/trace-schema.md` — normalized trace/evaluation/proposal/export schema
-- `docs/analysis/loop-engineering-analysis.md` — loop-engineering analysis and Hermes skill references
+- `docs/architecture.md` - system architecture and module responsibilities
+- `docs/cli.md` - command reference and smoke test
+- `docs/safety.md` - safety boundaries and threat model
+- `docs/trace-schema.md` - normalized trace/evaluation/proposal/export schema
+- `docs/analysis/loop-engineering-analysis.md` - loop-engineering analysis and Hermes skill references
 
 ## License
 
 Proprietary. All rights reserved.
 
-No permission is granted to use, copy, modify, distribute, sublicense, host, train on, or create derivative works from this repository or its contents without prior written permission from the copyright holder. See `LICENSE`.
+No permission is granted to use, copy, modify, distribute, sublicense, host,
+train on, or create derivative works from this repository or its contents
+without prior written permission from the copyright holder. See `LICENSE`.
