@@ -283,6 +283,46 @@ or:
 skillloop --path . <command>
 ```
 
+## Deploy SkillLoop Locally
+
+SkillLoop is deployed as a project-local sidecar, not as a hosted cloud service.
+The current deployment path is intentionally small:
+
+```bash
+python -m pip install -e .
+skillloop --path /path/to/project setup --connect hermes --start --auto-export
+```
+
+That command writes a conservative `.skillloop/policy.json`, ingests unseen
+Hermes sessions from `~/.hermes/state.db`, runs one controller tick, creates
+local SQLite state under `.skillloop/`, and optionally writes a controller-managed
+dataset manifest.
+
+`setup --start` runs one controller tick. It does not install or start a
+background service.
+
+For recurring local runs on macOS:
+
+```bash
+skillloop --path /path/to/project service install --kind launchd --interval-seconds 3600
+skillloop --path /path/to/project service status
+```
+
+`service install` writes a project-specific launchd plist and
+`.skillloop/service.json`, then prints the exact `launchctl` command to load it.
+SkillLoop does not silently start OS services or mutate global Hermes memory.
+
+Current deployment support:
+
+- macOS: launchd plist generation is implemented.
+- Linux: systemd/cron generation is not implemented yet.
+- Cloud: not required; SkillLoop is local-first by design.
+- Install path today: editable install from a cloned repo. A `pipx install
+  git+...` / wheel distribution path is a next packaging task.
+- Production hardening: filesystem write/delete boundaries are guarded for
+  controller-managed artifacts, approved exports, raw trace preservation, and
+  service uninstall paths.
+
 ### Try the Local Sample Trace
 
 ```bash
@@ -389,6 +429,7 @@ skillloop/
   cli.py             Command-line interface
   conditions.py      Declarative done/stopped/failing conditions
   controller.py      Policy-driven ingest/eval/distill/export tick
+  dataset_readiness.py Report-only readiness checks for controller-managed datasets
   dataset.py         Dataset split, manifest, provenance, and stats helpers
   loop.py            Outer-loop scheduling primitives
   policy.py          Conservative controller policy schema
@@ -410,9 +451,40 @@ tests/               Pytest coverage
 SkillLoop is not trying to become a second agent runtime. The next work is about
 making the learning layer more useful, safer, and more evidence-grounded.
 
-### 1. Typed-Memory Connector
+### 1. Core Learning Loop Quality
 
-The next architecture direction is a connector for a canonical typed-memory
+The most valuable next work is improving what SkillLoop learns from traces:
+
+- better memory proposal quality
+- better reusable skill distillation
+- stronger links from proposals back to trace/evaluation evidence
+- clearer reasons when a proposal should not be trusted yet
+
+This moves the product forward more than adding more gates around already
+conservative exports.
+
+### 2. Clean Demo and Deployment Path
+
+The repo should prove the sidecar in one or two commands:
+
+```bash
+python -m pip install -e .
+skillloop --path /path/to/project setup --connect hermes --start --auto-export
+```
+
+The next documentation/product goal is to make that path obvious: setup,
+controller run, status/history inspection, readiness visibility, and optional
+macOS service installation.
+
+### 3. Review/Apply UX Polish
+
+Approved memories and skills should be easy to inspect, compare, and apply.
+This should happen before deeper automation because the review gate is the
+safety boundary of the product.
+
+### 4. Typed-Memory Connector
+
+A later architecture direction is a connector for a canonical typed-memory
 backend.
 
 This is also the bridge to a broader companion agent architecture: SkillLoop
@@ -437,20 +509,7 @@ Initial mode should be read-only. Approved writes should require an explicit
 apply command. Database credentials should be referenced through environment
 variables, never stored in SkillLoop policy.
 
-### 2. Dataset Readiness Judge
-
-Before training is proposed, SkillLoop should judge whether a dataset is ready.
-
-The judge should inspect manifests and return one of:
-
-- `ready`
-- `collect_more_data`
-- `blocked`
-
-with machine-readable reasons based on record count, token count, split quality,
-score distribution, duplicate risk, and secret-scan results.
-
-### 3. Evaluator Staleness and Evidence Trust
+### 5. Evaluator Staleness and Evidence Trust
 
 Controller-managed datasets should not depend on stale scores. SkillLoop should
 detect evaluator component changes and flag old evaluations for refresh.
@@ -458,7 +517,7 @@ detect evaluator component changes and flag old evaluations for refresh.
 The evaluator should also separate verified evidence from assistant claims, so
 exports learn from actual outcomes rather than optimistic text.
 
-### 4. Training Planner
+### 6. Training Planner
 
 Training plans should come after readiness, staleness, and evidence-trust gates.
 
@@ -474,7 +533,7 @@ The planner should generate reviewable artifacts describing:
 
 Actual training should remain manual/approved at first.
 
-### 5. Operational Hardening
+### 7. Operational Hardening
 
 Planned hardening includes:
 

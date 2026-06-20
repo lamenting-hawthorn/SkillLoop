@@ -201,6 +201,10 @@ This module does not launch training. Generated configs include explicit no-auto
 ingest -> evaluate -> distill -> optional dataset export -> report
 ```
 
+Controller-managed dataset export also attaches a report-only readiness verdict
+to the dataset action and manifest metadata. This is intentionally not a hard
+export gate yet; it is a signal for humans and future training gates.
+
 ### `skillloop.loop` and `skillloop.conditions`
 
 The outer-loop primitives support scheduled local evaluation/distillation passes and declarative done conditions:
@@ -212,6 +216,38 @@ The outer-loop primitives support scheduled local evaluation/distillation passes
 
 These are local scheduling primitives. Platform service installation is handled separately by `skillloop.service`: on macOS, SkillLoop can write a launchd plist plus `.skillloop/service.json` metadata for recurring controller ticks. The CLI prints the exact `launchctl` commands instead of silently loading or unloading OS services.
 
+## Deployment Model
+
+SkillLoop is deployed as a local sidecar inside or beside a project, not as a
+central cloud service. The practical deployment path is:
+
+```bash
+python -m pip install -e .
+skillloop --path /path/to/project setup --connect hermes --start --auto-export
+```
+
+That command creates project-local `.skillloop/` state, configures read-only
+Hermes ingestion, runs one controller tick, and optionally produces a
+controller-managed dataset manifest.
+
+This is a one-shot setup/run path. Recurring execution is a separate service
+installation step.
+
+For recurring macOS use, the service layer can generate launchd metadata:
+
+```bash
+skillloop --path /path/to/project service install --kind launchd --interval-seconds 3600
+```
+
+SkillLoop does not silently start services. It records metadata and prints the
+exact OS command to load or unload the service. Linux service generation is still
+future work.
+
+The current deployment story assumes a cloned repo and editable Python install.
+A packaged install path, such as `pipx install git+...` or a wheel release,
+should come before advertising SkillLoop as a one-command install for external
+users.
+
 ## Boundary with Hermes
 
 Hermes is the runtime. SkillLoop is the learning governor.
@@ -222,10 +258,13 @@ This boundary is deliberate: it keeps the learning layer inspectable, reviewable
 
 ## Roadmap priorities
 
-1. Add a dataset readiness judge before any training plan is recommended.
-2. Add evaluator staleness detection when evaluator code/provenance changes.
-3. Add stronger evidence-trust scoring so learning artifacts depend on tool/user evidence rather than assistant claims.
-4. Add approval-gated training plans; keep training execution separate until readiness, cost, evaluation, and promotion gates exist.
-5. Add Linux service generation (`systemd` unit or cron) after the macOS launchd path has had more real local use.
+1. Improve core learning-loop quality: proposal quality, memory/skill distillation, and evidence links.
+2. Build a clean demo/deployment path that proves setup, controller run, status/history, readiness, and optional service install in one or two commands.
+3. Polish review/apply UX so approved memories and skills are easy to inspect and use.
+4. Add a packaged install path and a local deployment wrapper, while keeping OS service loading explicit.
+5. Add evaluator staleness detection when evaluator code/provenance changes.
+6. Add stronger evidence-trust scoring so learning artifacts depend on tool/user evidence rather than assistant claims.
+7. Add approval-gated training plans only after readiness, cost, evaluation, and promotion gates exist.
+8. Add Linux service generation (`systemd` unit or cron) after the macOS launchd path has had more real local use.
 
 The macOS launchd path has passed an isolated real-system smoke test against local Hermes `state.db`: controller tick, status/history/show, dataset manifest generation, service plist generation, service status, and service uninstall all succeeded without loading a persistent OS service.

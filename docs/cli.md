@@ -12,6 +12,42 @@ Equivalent module form:
 python -m skillloop.cli --path . <command>
 ```
 
+## Local Deployment
+
+SkillLoop deploys as a project-local sidecar. The current one-time setup path is:
+
+```bash
+python -m pip install -e .
+skillloop --path /path/to/project setup --connect hermes --start --auto-export
+```
+
+That creates `.skillloop/policy.json`, reads Hermes sessions from
+`~/.hermes/state.db`, runs one controller tick, stores local state in
+`.skillloop/`, and writes a dataset manifest when auto-export is enabled.
+
+`setup --start` is a one-shot controller run. It does not install, bootstrap, or
+start a background service.
+
+For recurring controller ticks on macOS:
+
+```bash
+skillloop --path /path/to/project service install --kind launchd --interval-seconds 3600
+skillloop --path /path/to/project service status
+```
+
+`service install` writes a launchd plist and `.skillloop/service.json`, then
+prints the exact `launchctl` command. It does not silently load the service.
+
+Current deployment scope:
+
+- macOS launchd plist generation is implemented.
+- Linux systemd/cron generation is not implemented yet.
+- No cloud service is required.
+- SkillLoop does not mutate Hermes memory, skills, config, cron jobs, tools, or
+  model state.
+- The current install story assumes a cloned repo and editable install. A stable
+  `pipx install git+...` or wheel-based path is future packaging work.
+
 ## `init`
 
 Initializes local SkillLoop state.
