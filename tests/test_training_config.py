@@ -76,3 +76,20 @@ def test_generate_axolotl_config(tmp_path):
     assert "base_model" in config
     assert "training_auto_run: false" in config
     assert "sft.train.jsonl" in config
+
+
+def test_training_config_generation_allows_explicit_config_dir_outside_project(tmp_path):
+    manifest = _manifest(tmp_path)
+    config_dir = tmp_path.parent / f"{tmp_path.name}-configs"
+    summary = generate_training_config(
+        TrainingConfigRequest(
+            target="trl",
+            dataset_manifest=str(manifest),
+            base_model="NousResearch/Test",
+            output_dir=str(tmp_path / "out"),
+            config_dir=config_dir,
+        )
+    )
+
+    assert summary["files"]["config"] == str((config_dir / "trl_sft_config.json").resolve())
+    assert (config_dir / "trl_sft_config.json").exists()

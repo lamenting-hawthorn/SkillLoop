@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from skillloop.sanitize import redact_data, redact_secrets
+from skillloop.sanitize import redact_artifact_refs, redact_data, redact_secrets
 
 TRACE_SCHEMA_VERSION = "1.1"
 TOOL_CALL_STATUSES = {"pending", "running", "success", "error", "cancelled", "unknown"}
@@ -90,7 +90,7 @@ class ToolCall:
             "exit_code": self.exit_code,
             "status": self.status,
             "error_type": self.error_type,
-            "artifact_refs": self.artifact_refs,
+            "artifact_refs": redact_artifact_refs(self.artifact_refs),
         }
 
     @classmethod

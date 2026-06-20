@@ -100,6 +100,16 @@ def test_span_ready_tool_call_round_trip():
     assert restored.artifact_refs == [".skillloop/artifacts/test.log"]
 
 
+def test_sensitive_artifact_refs_are_redacted_on_export_but_still_load():
+    ref = "/Users/example/.ssh/id_rsa"
+    call = ToolCall(name="terminal", artifact_refs=[ref])
+
+    assert call.artifact_refs == [ref]
+    assert call.to_dict()["artifact_refs"] == ["[REDACTED_ARTIFACT_REF]"]
+    restored = ToolCall.from_dict({"name": "terminal", "artifact_refs": [ref]})
+    assert restored.artifact_refs == [ref]
+
+
 def test_old_proposal_without_lifecycle_metadata_still_loads():
     proposal = Proposal.from_dict(
         {

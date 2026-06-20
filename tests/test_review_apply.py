@@ -47,6 +47,60 @@ def test_export_rejects_paths_outside_project(tmp_path):
         export_approved(store, out_dir=tmp_path.parent / "outside")
 
 
+def test_export_rejects_malicious_proposal_kind(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    trace = AgentTrace(source="test", messages=[AgentMessage(role="user", content="hello")])
+    store.save_trace(trace)
+    store.save_proposal(Proposal(trace_id=trace.id, kind="../x", title="t", content="c", reason="r", status="approved"))
+
+    with pytest.raises(ValueError, match="unsupported approved proposal kind"):
+        export_approved(store)
+
+
+def test_export_rejects_malicious_proposal_id(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    trace = AgentTrace(source="test", messages=[AgentMessage(role="user", content="hello")])
+    store.save_trace(trace)
+    store.save_proposal(Proposal(trace_id=trace.id, kind="memory", id="../x", title="t", content="c", reason="r", status="approved"))
+
+    with pytest.raises(ValueError, match="proposal id"):
+        export_approved(store)
+
+
+def test_export_rejects_unknown_proposal_kind(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    trace = AgentTrace(source="test", messages=[AgentMessage(role="user", content="hello")])
+    store.save_trace(trace)
+    store.save_proposal(Proposal(trace_id=trace.id, kind="note", title="t", content="c", reason="r", status="approved"))
+
+    with pytest.raises(ValueError, match="unsupported approved proposal kind"):
+        export_approved(store)
+
+
+def test_export_rejects_tampered_proposal_content_hash(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    trace = AgentTrace(source="test", messages=[AgentMessage(role="user", content="hello")])
+    store.save_trace(trace)
+    proposal = Proposal(trace_id=trace.id, kind="memory", title="t", content="c", reason="r", status="approved")
+    proposal.content_hash = "bad"
+    store.save_proposal(proposal)
+
+    with pytest.raises(ValueError, match="content hash mismatch"):
+        export_approved(store)
+
+
+def test_export_rejects_symlinked_approved_output_dir(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    store.init()
+    outside = tmp_path.parent / f"{tmp_path.name}-approved-outside"
+    outside.mkdir()
+    approved = tmp_path / ".skillloop" / "approved"
+    approved.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="approved export path"):
+        export_approved(store)
+
+
 def test_duplicate_proposals_are_not_saved_twice(tmp_path):
     store = SkillLoopStore(tmp_path)
     trace = AgentTrace(source="test", messages=[AgentMessage(role="user", content="hello")])

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from skillloop.sanitize import redact_artifact_refs
 from skillloop.schema import AgentMessage, ToolCall
 
 
@@ -52,7 +53,7 @@ def file_artifact_evidence(calls: list[ToolCall]) -> list[dict[str, object]]:
         {
             "kind": "file_artifact",
             "tool_call_id": call.id,
-            "artifact_refs": call.artifact_refs,
+            "artifact_refs": redact_artifact_refs(call.artifact_refs),
         }
         for call in calls
         if call.artifact_refs

@@ -5,7 +5,8 @@ import sqlite3
 import shutil
 from pathlib import Path
 
-from skillloop.schema import AgentTrace, Evaluation, Proposal, sha256_text
+from skillloop.fs_safety import ensure_not_symlink_escape, resolve_under_root, safe_path_segment, sha256_bytes
+from skillloop.schema import AgentTrace, Evaluation, Proposal
 
 
 class SkillLoopStore:
@@ -16,7 +17,9 @@ class SkillLoopStore:
         self.raw_trace_dir = self.state_dir / "raw_traces"
 
     def init(self) -> None:
+        ensure_not_symlink_escape(self.state_dir, self.root, label="state directory")
         self.state_dir.mkdir(parents=True, exist_ok=True)
+        ensure_not_symlink_escape(self.state_dir, self.root, label="state directory")
         with self._connect() as conn:
             conn.execute(
                 """
@@ -83,11 +86,14 @@ class SkillLoopStore:
         raw_path = Path(trace.raw_artifact_ref).expanduser()
         if not raw_path.exists() or not raw_path.is_file():
             return
+        trace_id = safe_path_segment(trace.id, label="trace id")
         raw_bytes = raw_path.read_bytes()
-        trace.raw_trace_sha256 = trace.raw_trace_sha256 or sha256_text(raw_bytes.decode("utf-8", errors="replace"))
+        trace.raw_trace_sha256 = trace.raw_trace_sha256 or sha256_bytes(raw_bytes)
+        ensure_not_symlink_escape(self.raw_trace_dir, self.state_dir, label="raw trace directory")
         self.raw_trace_dir.mkdir(parents=True, exist_ok=True)
+        ensure_not_symlink_escape(self.raw_trace_dir, self.state_dir, label="raw trace directory")
         suffix = raw_path.suffix or ".raw"
-        preserved = self.raw_trace_dir / f"{trace.id}{suffix}"
+        preserved = ensure_not_symlink_escape(self.raw_trace_dir / f"{trace_id}{suffix}", self.raw_trace_dir, label="preserved raw trace")
         if raw_path.resolve() != preserved.resolve():
             shutil.copyfile(raw_path, preserved)
         trace.raw_artifact_ref = str(preserved.relative_to(self.root))
@@ -96,8 +102,13 @@ class SkillLoopStore:
         trace_obj = self.get_trace(trace) if isinstance(trace, str) else trace
         if not trace_obj.raw_artifact_ref:
             raise FileNotFoundError(f"trace has no preserved raw artifact: {trace_obj.id}")
-        raw_path = (self.root / trace_obj.raw_artifact_ref).resolve()
-        raw_path.relative_to(self.root)
+        ensure_not_symlink_escape(self.raw_trace_dir, self.state_dir, label="raw trace directory")
+        raw_path = resolve_under_root(self.root, trace_obj.raw_artifact_ref, label="preserved raw trace")
+        try:
+            raw_path.relative_to(self.raw_trace_dir.resolve())
+        except ValueError as exc:
+            raise ValueError(f"preserved raw trace must stay under {self.raw_trace_dir}") from exc
+        ensure_not_symlink_escape(raw_path, self.raw_trace_dir, label="preserved raw trace")
         return raw_path.read_text(encoding="utf-8")
 
     def get_trace(self, trace_id: str) -> AgentTrace:

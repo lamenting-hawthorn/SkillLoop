@@ -1,7 +1,9 @@
 import json
 import sqlite3
 
-from skillloop.controller import controller_tick
+import pytest
+
+from skillloop.controller import ControllerRunReport, controller_tick, export_dataset_from_policy, save_controller_report
 from skillloop.policy import DatasetPolicy, EvaluationPolicy, IngestionPolicy, SkillLoopPolicy
 from skillloop.store import SkillLoopStore
 
@@ -41,6 +43,27 @@ def test_controller_tick_ingests_evaluates_exports_and_records_report(tmp_path):
     stored_runs = store.list_controller_runs()
     assert [run["id"] for run in stored_runs] == [report.id]
     assert store.get_controller_run(report.id[:8])["id"] == report.id
+
+
+def test_controller_dataset_policy_out_rejects_relative_traversal(tmp_path):
+    policy = SkillLoopPolicy(dataset=DatasetPolicy(enabled=True, out="../outside.jsonl"))
+
+    with pytest.raises(ValueError, match="controller dataset output"):
+        export_dataset_from_policy(SkillLoopStore(tmp_path), policy)
+
+
+def test_controller_dataset_policy_out_rejects_absolute_path_outside_project(tmp_path):
+    policy = SkillLoopPolicy(dataset=DatasetPolicy(enabled=True, out=str(tmp_path.parent / "outside.jsonl")))
+
+    with pytest.raises(ValueError, match="controller dataset output"):
+        export_dataset_from_policy(SkillLoopStore(tmp_path), policy)
+
+
+def test_controller_report_id_rejects_path_traversal(tmp_path):
+    report = ControllerRunReport(id="../escape", started_at="2026-01-01T00:00:00+00:00", finished_at="2026-01-01T00:00:01+00:00")
+
+    with pytest.raises(ValueError, match="controller report id"):
+        save_controller_report(SkillLoopStore(tmp_path), report)
 
 
 def test_controller_policy_round_trip(tmp_path):

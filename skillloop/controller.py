@@ -10,6 +10,7 @@ from skillloop.adapters.hermes import list_hermes_state_sessions, load_hermes_st
 from skillloop.dataset import build_manifest, parse_split_spec, split_records, write_jsonl, write_manifest
 from skillloop.export.dpo import export_dpo_records
 from skillloop.export.sft import export_sft_records
+from skillloop.fs_safety import ensure_not_symlink_escape, resolve_under_root, safe_path_segment
 from skillloop.loop import LoopRunSummary, run_outer_loop
 from skillloop.policy import SkillLoopPolicy
 from skillloop.schema import AgentTrace, Evaluation, Proposal, now_iso, sha256_text, stable_json_dumps
@@ -44,14 +45,16 @@ class ControllerRunReport:
 
 
 def controller_runs_dir(store: SkillLoopStore) -> Path:
-    return store.state_dir / "controller_runs"
+    store.init()
+    return ensure_not_symlink_escape(store.state_dir / "controller_runs", store.state_dir, label="controller runs directory")
 
 
 def save_controller_report(store: SkillLoopStore, report: ControllerRunReport) -> Path:
     store.init()
     if report.finished_at is None:
         report.finish()
-    out = controller_runs_dir(store) / f"{report.id}.json"
+    report_id = safe_path_segment(report.id, label="controller report id")
+    out = ensure_not_symlink_escape(controller_runs_dir(store) / f"{report_id}.json", controller_runs_dir(store), label="controller report output")
     out.parent.mkdir(parents=True, exist_ok=True)
     payload = report.to_dict()
     out.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -148,7 +151,7 @@ def export_dataset_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -
 
     split_spec = parse_split_spec(dataset.splits)
     split_map = split_records(records, split_spec)
-    out = (store.root / dataset.out).resolve()
+    out = resolve_under_root(store.root, dataset.out, label="controller dataset output")
     output_files: dict[str, Path] = {}
     if len(split_map) == 1 and "train" in split_map:
         output_files["train"] = write_jsonl(out, split_map["train"])
