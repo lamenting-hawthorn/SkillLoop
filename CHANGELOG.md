@@ -5,7 +5,7 @@
 ### Changed
 
 - Rewrote public documentation to reflect the current SkillLoop sidecar architecture, Hermes setup/status/controller UX, loop primitives, dataset manifests, training config generation, and safety boundaries.
-- Changed project license posture from Apache-2.0 to proprietary/all-rights-reserved.
+- Changed project license posture from proprietary/all-rights-reserved to Apache-2.0.
 
 ## 0.1.0 - MVP
 

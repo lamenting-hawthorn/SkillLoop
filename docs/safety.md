@@ -106,7 +106,7 @@ Agent traces may contain private content. Before sharing data produced by SkillL
 
 ## Licensing and usage boundary
 
-This repository is proprietary and all rights are reserved. Viewing the source does not grant permission to use, copy, distribute, host, train on, or create derivative works from it. See `LICENSE`.
+This repository is licensed under Apache License 2.0. See `LICENSE` for the governing terms.
 
 ## Known limitations
 

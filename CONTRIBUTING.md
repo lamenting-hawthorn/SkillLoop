@@ -1,8 +1,8 @@
 # Contributing to SkillLoop
 
-SkillLoop is currently a proprietary, all-rights-reserved project. Contributions are welcome only when explicitly requested or approved by the maintainer.
+SkillLoop is open source under the Apache License 2.0.
 
-By opening a pull request, submitting a patch, or otherwise contributing material to this repository, you represent that you have the right to submit the contribution and you grant the maintainer a perpetual, worldwide, royalty-free right to use, modify, reproduce, distribute, sublicense, and incorporate that contribution into SkillLoop under the project's current or future licensing terms. If you do not agree to this, do not submit a contribution.
+By opening a pull request, submitting a patch, or otherwise contributing material to this repository, you represent that you have the right to submit the contribution. Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in SkillLoop is licensed under Apache License 2.0, consistent with the project's license.
 
 ## Project position
 
@@ -132,4 +132,4 @@ Dataset/training work must remain conservative:
 
 ## License reminder
 
-This project is proprietary and all rights are reserved. Do not reuse, copy, distribute, or incorporate any part of SkillLoop without written permission from the copyright holder.
+By contributing to this repository, you agree that your contributions will be licensed under Apache License 2.0 unless explicitly stated otherwise.

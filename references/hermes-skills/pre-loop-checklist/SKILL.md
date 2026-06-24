@@ -3,7 +3,7 @@ name: pre-loop-checklist
 description: "Gate before creating any cron job: run the 4-condition test + 30-second checklist to determine if loop engineering is worth the token cost. Source: 0xCodez loop engineering framework (June 2026), Anthropic engineering docs, Addy Osmani."
 version: 1.0.0
 author: Hermes Agent
-license: Proprietary - All Rights Reserved
+license: Apache-2.0
 metadata:
   hermes:
     tags: [loop-engineering, cron, gates, automation, cost-control]

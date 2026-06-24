@@ -578,8 +578,4 @@ python -m pip wheel . --no-deps -w /tmp/skillloop-wheel-check
 
 ## License
 
-Proprietary. All rights reserved.
-
-No permission is granted to use, copy, modify, distribute, sublicense, host,
-train on, or create derivative works from this repository or its contents
-without prior written permission from the copyright holder. See `LICENSE`.
+Apache License 2.0. See `LICENSE`.
