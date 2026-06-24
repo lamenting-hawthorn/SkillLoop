@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from skillloop.adapters.claude_code import latest_claude_code_session, load_claude_code_session
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
 from skillloop.adapters.hermes import load_hermes_export, load_hermes_state_db
 from skillloop.apply.filesystem import export_approved
@@ -179,6 +180,14 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         trace = load_hermes_export(args.input)
     elif args.adapter == "hermes-db":
         trace = load_hermes_state_db(args.db_path, session_id=args.session_id, latest=args.latest)
+    elif args.adapter == "claude-code":
+        if args.latest:
+            source = latest_claude_code_session(args.projects_dir, project=args.project)
+        elif args.input:
+            source = args.input
+        else:
+            raise SystemExit("claude-code ingest requires an input .jsonl path or --latest")
+        trace = load_claude_code_session(source, include_sidechains=not args.no_sidechains)
     else:
         raise SystemExit(f"Unsupported adapter: {args.adapter}")
     trace_id = store.save_trace(trace)
@@ -581,11 +590,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_status.set_defaults(func=cmd_status)
 
     p_ingest = sub.add_parser("ingest", help="Ingest a trace")
-    p_ingest.add_argument("adapter", choices=["generic", "hermes", "hermes-db"])
-    p_ingest.add_argument("input", nargs="?", help="Input JSONL/JSON path for generic or hermes adapters")
+    p_ingest.add_argument("adapter", choices=["generic", "hermes", "hermes-db", "claude-code"])
+    p_ingest.add_argument("input", nargs="?", help="Input JSONL/JSON path for generic, hermes, or claude-code adapters")
     p_ingest.add_argument("--db-path", default=str(Path.home() / ".hermes" / "state.db"), help="Hermes state.db path for hermes-db adapter")
     p_ingest.add_argument("--session-id", default=None, help="Hermes session id for hermes-db adapter")
-    p_ingest.add_argument("--latest", action="store_true", help="Use latest Hermes session with messages for hermes-db adapter")
+    p_ingest.add_argument("--latest", action="store_true", help="Use the latest session (hermes-db: newest session with messages; claude-code: newest transcript)")
+    p_ingest.add_argument("--projects-dir", default=str(Path.home() / ".claude" / "projects"), help="Claude Code projects dir for the claude-code adapter")
+    p_ingest.add_argument("--project", default=None, help="Claude Code project slug to scope --latest to one project")
+    p_ingest.add_argument("--no-sidechains", action="store_true", help="Exclude subagent sidechain turns (claude-code adapter)")
     p_ingest.set_defaults(func=cmd_ingest)
 
     p_traces = sub.add_parser("traces", help="List/show traces")
