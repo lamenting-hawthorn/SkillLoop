@@ -6,8 +6,16 @@ from pathlib import Path
 from typing import Any
 
 from skillloop.conditions import LoopCondition
+from skillloop.errors import InputError, PolicyError
+from skillloop.sanitize import MAX_FIELD_CHARS, validate_field_size
 
 POLICY_VERSION = "1.0"
+
+SUPPORTED_INGESTION_ADAPTERS = frozenset({"none", "generic", "hermes-db"})
+SUPPORTED_DATASET_KINDS = frozenset({"sft", "dpo"})
+SUPPORTED_TRAINING_TARGETS = frozenset({"axolotl"})
+SUPPORTED_MODES = frozenset({"autonomous_review_first", "manual", "autonomous"})
+SUPPORTED_EVALUATORS = frozenset({"rubric", "llm_judge", "none"})
 
 
 @dataclass
@@ -22,13 +30,31 @@ class IngestionPolicy:
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "IngestionPolicy":
         data = dict(data or {})
+        adapter = str(data.get("adapter") or "none")
+        if adapter not in SUPPORTED_INGESTION_ADAPTERS:
+            raise PolicyError(
+                f"unsupported ingestion adapter: {adapter!r}",
+                context={"supported": sorted(SUPPORTED_INGESTION_ADAPTERS)},
+            )
+        paths = [str(path) for path in data.get("paths", [])]
+        hermes_db_path = data.get("hermes_db_path")
+        if hermes_db_path is not None:
+            hermes_db_path = str(hermes_db_path)
+        max_sessions = int(data.get("max_sessions", 20))
+        if max_sessions <= 0:
+            raise PolicyError(f"ingestion.max_sessions must be positive, got {max_sessions}")
+        for field_name, value in (("adapter", adapter), ("hermes_db_path", hermes_db_path)):
+            if value is not None:
+                validate_field_size(value, label=f"ingestion.{field_name}")
+        for index, path in enumerate(paths):
+            validate_field_size(path, label=f"ingestion.paths[{index}]")
         return cls(
             enabled=bool(data.get("enabled", False)),
-            adapter=str(data.get("adapter") or "none"),
-            paths=[str(path) for path in data.get("paths", [])],
-            hermes_db_path=data.get("hermes_db_path"),
+            adapter=adapter,
+            paths=paths,
+            hermes_db_path=hermes_db_path,
             latest=bool(data.get("latest", False)),
-            max_sessions=int(data.get("max_sessions", 20)),
+            max_sessions=max_sessions,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -67,12 +93,24 @@ class EvaluationPolicy:
     def from_dict(cls, data: dict[str, Any] | None) -> "EvaluationPolicy":
         data = dict(data or {})
         min_score = int(data.get("min_score", 70))
+        if not 0 <= min_score <= 100:
+            raise PolicyError(f"evaluation.min_score must be in 0..100, got {min_score}")
+        evaluator = str(data.get("evaluator") or "rubric")
+        if evaluator not in SUPPORTED_EVALUATORS:
+            raise PolicyError(
+                f"unsupported evaluation evaluator: {evaluator!r}",
+                context={"supported": sorted(SUPPORTED_EVALUATORS)},
+            )
+        limit = data.get("limit")
+        if limit is not None and int(limit) <= 0:
+            raise PolicyError(f"evaluation.limit must be positive, got {limit}")
+        validate_field_size(evaluator, label="evaluation.evaluator")
         return cls(
-            evaluator=str(data.get("evaluator") or "rubric"),
+            evaluator=evaluator,
             min_score=min_score,
             only_unevaluated=bool(data.get("only_unevaluated", True)),
             distill_failures=bool(data.get("distill_failures", True)),
-            limit=data.get("limit"),
+            limit=limit,
             condition=LoopCondition.from_dict(data.get("condition") or {"score_gte": min_score}),
         )
 
@@ -100,13 +138,26 @@ class DatasetPolicy:
     def from_dict(cls, data: dict[str, Any] | None) -> "DatasetPolicy":
         data = dict(data or {})
         enabled = bool(data.get("enabled", False))
+        kind = str(data.get("kind") or "sft")
+        if kind not in SUPPORTED_DATASET_KINDS:
+            raise PolicyError(
+                f"unsupported dataset kind: {kind!r}",
+                context={"supported": sorted(SUPPORTED_DATASET_KINDS)},
+            )
+        out = str(data.get("out") or "data/sft.jsonl")
+        min_score = int(data.get("min_score", 70))
+        if not 0 <= min_score <= 100:
+            raise PolicyError(f"dataset.min_score must be in 0..100, got {min_score}")
+        splits = str(data.get("splits") or "train=0.8,validation=0.1,test=0.1")
+        validate_field_size(out, label="dataset.out")
+        validate_field_size(splits, label="dataset.splits")
         return cls(
             enabled=enabled,
             auto_update=bool(data.get("auto_update", enabled)),
-            kind=str(data.get("kind") or "sft"),
-            out=str(data.get("out") or "data/sft.jsonl"),
-            min_score=int(data.get("min_score", 70)),
-            splits=str(data.get("splits") or "train=0.8,validation=0.1,test=0.1"),
+            kind=kind,
+            out=out,
+            min_score=min_score,
+            splits=splits,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -133,13 +184,25 @@ class TrainingPolicy:
     def from_dict(cls, data: dict[str, Any] | None) -> "TrainingPolicy":
         data = dict(data or {})
         max_cost = data.get("max_cost_usd")
+        if max_cost is not None:
+            max_cost = float(max_cost)
+            if max_cost <= 0:
+                raise PolicyError(f"training.max_cost_usd must be positive, got {max_cost}")
+        target = str(data.get("target") or "axolotl")
+        if target not in SUPPORTED_TRAINING_TARGETS:
+            raise PolicyError(
+                f"unsupported training target: {target!r}",
+                context={"supported": sorted(SUPPORTED_TRAINING_TARGETS)},
+            )
+        base_model = str(data.get("base_model") or "")
+        validate_field_size(base_model, label="training.base_model")
         return cls(
             auto_plan=bool(data.get("auto_plan", False)),
             auto_run=bool(data.get("auto_run", False)),
             require_approval=bool(data.get("require_approval", True)),
-            target=str(data.get("target") or "axolotl"),
-            base_model=str(data.get("base_model") or ""),
-            max_cost_usd=float(max_cost) if max_cost is not None else None,
+            target=target,
+            base_model=base_model,
+            max_cost_usd=max_cost,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -168,9 +231,19 @@ class SkillLoopPolicy:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SkillLoopPolicy":
+        data = dict(data or {})
+        version = str(data.get("version") or POLICY_VERSION)
+        if version != POLICY_VERSION:
+            raise PolicyError(f"unsupported policy version: {version!r} (expected {POLICY_VERSION})")
+        mode = str(data.get("mode") or "autonomous_review_first")
+        if mode not in SUPPORTED_MODES:
+            raise PolicyError(
+                f"unsupported mode: {mode!r}",
+                context={"supported": sorted(SUPPORTED_MODES)},
+            )
         return cls(
-            version=str(data.get("version") or POLICY_VERSION),
-            mode=str(data.get("mode") or "autonomous_review_first"),
+            version=version,
+            mode=mode,
             ingestion=IngestionPolicy.from_dict(data.get("ingestion")),
             evaluation=EvaluationPolicy.from_dict(data.get("evaluation")),
             dataset=DatasetPolicy.from_dict(data.get("dataset")),
@@ -179,12 +252,19 @@ class SkillLoopPolicy:
 
     @classmethod
     def load(cls, path: str | Path) -> "SkillLoopPolicy":
-        return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
+        try:
+            raw = Path(path).read_text(encoding="utf-8")
+        except OSError as exc:
+            from skillloop.errors import ConfigError
+
+            raise ConfigError(f"failed to read policy file: {path}") from exc
+        return cls.from_dict(json.loads(raw))
 
     def save(self, path: str | Path) -> Path:
+        from skillloop.fs_safety import atomic_write_json
+
         out = Path(path).resolve()
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(self.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        atomic_write_json(out, self.to_dict())
         return out
 
     def to_dict(self) -> dict[str, Any]:

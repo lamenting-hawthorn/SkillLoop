@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -11,9 +10,10 @@ from skillloop.dataset import build_manifest, parse_split_spec, split_records, w
 from skillloop.dataset_readiness import assess_dataset_readiness
 from skillloop.export.dpo import export_dpo_records
 from skillloop.export.sft import export_sft_records
-from skillloop.fs_safety import ensure_not_symlink_escape, resolve_under_root, safe_path_segment
+from skillloop.fs_safety import atomic_write_json, ensure_not_symlink_escape, resolve_under_root, safe_path_segment
 from skillloop.loop import LoopRunSummary, run_outer_loop
 from skillloop.policy import SkillLoopPolicy
+from skillloop.sanitize import redact_for_report
 from skillloop.schema import AgentTrace, Evaluation, Proposal, now_iso, sha256_text, stable_json_dumps
 from skillloop.store import SkillLoopStore
 
@@ -57,8 +57,9 @@ def save_controller_report(store: SkillLoopStore, report: ControllerRunReport) -
     report_id = safe_path_segment(report.id, label="controller report id")
     out = ensure_not_symlink_escape(controller_runs_dir(store) / f"{report_id}.json", controller_runs_dir(store), label="controller report output")
     out.parent.mkdir(parents=True, exist_ok=True)
+    report.errors = [redact_for_report(err, pii=True) for err in report.errors]
     payload = report.to_dict()
-    out.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    atomic_write_json(out, payload)
     store.save_controller_run(payload)
     return out
 
@@ -197,7 +198,7 @@ def controller_tick(store: SkillLoopStore, policy: SkillLoopPolicy) -> Controlle
         ingested = ingest_from_policy(store, policy)
         report.actions.append({"type": "ingest", "count": len(ingested), "trace_ids": ingested})
     except Exception as exc:  # noqa: BLE001 - controller must report and continue to safe later stages
-        report.errors.append(f"ingest:{type(exc).__name__}:{exc}")
+        report.errors.append(redact_for_report(f"ingest:{type(exc).__name__}:{exc}", pii=True))
 
     evaluation_policy = policy.evaluation
     loop_summary: LoopRunSummary = run_outer_loop(
@@ -216,7 +217,7 @@ def controller_tick(store: SkillLoopStore, policy: SkillLoopPolicy) -> Controlle
         if dataset_summary is not None:
             report.actions.append({"type": "dataset_export", **dataset_summary})
     except Exception as exc:  # noqa: BLE001
-        report.errors.append(f"dataset:{type(exc).__name__}:{exc}")
+        report.errors.append(redact_for_report(f"dataset:{type(exc).__name__}:{exc}", pii=True))
 
     report.summary = {
         "errors": len(report.errors),
