@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from skillloop import __version__
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
 from skillloop.adapters.hermes import load_hermes_export, load_hermes_state_db
 from skillloop.apply.filesystem import export_approved
@@ -13,8 +14,10 @@ from skillloop.controller import controller_tick
 from skillloop.dataset import build_manifest, parse_split_spec, split_records, write_jsonl, write_manifest
 from skillloop.distill.memory import propose_memory_updates
 from skillloop.distill.skills import propose_skill_updates
+from skillloop.diagnostics import run_diagnostics
 from skillloop.eval.registry import default_evaluator_registry
 from skillloop.export.dpo import export_dpo_records
+from skillloop.export.okf import export_okf_bundle
 from skillloop.export.sft import export_sft_records
 from skillloop.conditions import LoopCondition
 from skillloop.loop import LoopSchedule, load_schedule, proposals_with_provenance, run_outer_loop, save_schedule, tick
@@ -69,7 +72,18 @@ def cmd_init(args: argparse.Namespace) -> int:
     store = _store(args)
     store.init()
     print(f"Initialized SkillLoop at {store.state_dir}")
+    print("Next: ingest a trace, then run `skillloop --path <project> eval latest`")
     return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    checks = run_diagnostics(args.path)
+    if args.json:
+        print(json.dumps({"checks": [check.to_dict() for check in checks]}, indent=2, ensure_ascii=False))
+    else:
+        for check in checks:
+            print(f"{check.status.upper():4}  {check.name}: {check.message}")
+    return 1 if any(check.status == "fail" for check in checks) else 0
 
 
 def cmd_setup(args: argparse.Namespace) -> int:
@@ -286,12 +300,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 
 def _evaluations_by_trace(store: SkillLoopStore, traces: list[AgentTrace]) -> dict[str, Evaluation]:
-    result: dict[str, Evaluation] = {}
-    for trace in traces:
-        latest = store.latest_evaluation(trace.id)
-        if latest is not None:
-            result[trace.id] = latest
-    return result
+    return store.latest_evaluations({trace.id for trace in traces})
 
 
 def _proposals_by_trace(store: SkillLoopStore, traces: list[AgentTrace]) -> dict[str, list[Proposal]]:
@@ -322,6 +331,10 @@ def cmd_export(args: argparse.Namespace) -> int:
         records = export_sft_records(traces, evaluations_by_trace=evaluations_by_trace, proposals_by_trace=proposals_by_trace)
     elif args.format == "dpo":
         records = export_dpo_records(traces, evaluations_by_trace=evaluations_by_trace, proposals_by_trace=proposals_by_trace)
+    elif args.format == "okf":
+        bundle_path = export_okf_bundle(store, Path(args.out))
+        print(f"Exported OKF bundle to {bundle_path}")
+        return 0
     else:
         raise SystemExit(f"Unsupported export format: {args.format}")
 
@@ -561,10 +574,15 @@ def cmd_service_uninstall(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SkillLoop: clean learning/export layer for agent traces")
     parser.add_argument("--path", default=".", help="Project root for .skillloop state (default: current directory)")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="Initialize local .skillloop state")
     p_init.set_defaults(func=cmd_init)
+
+    p_doctor = sub.add_parser("doctor", help="Check installation, project state, policy, and connectors")
+    p_doctor.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    p_doctor.set_defaults(func=cmd_doctor)
 
     p_setup = sub.add_parser("setup", help="Configure SkillLoop as a local sidecar")
     p_setup.add_argument("--connect", choices=["hermes"], required=True, help="Runtime to connect (currently: hermes)")
@@ -624,7 +642,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_apply.set_defaults(func=cmd_apply)
 
     p_export = sub.add_parser("export", help="Export fine-tuning-ready JSONL")
-    p_export.add_argument("format", choices=["sft", "dpo"])
+    p_export.add_argument("format", choices=["sft", "dpo", "okf"])
     p_export.add_argument("--out", required=True)
     p_export.add_argument("--manifest-out", default=None, help="Optional manifest JSON path (default: <out>.manifest.json)")
     p_export.add_argument("--splits", default=None, help="Optional split ratios, e.g. train=0.8,validation=0.1,test=0.1")
