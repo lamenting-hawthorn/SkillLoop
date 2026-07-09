@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
-import plistlib
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,52 +72,6 @@ def build_service_spec(
     )
 
 
-def launchd_plist(spec: ServiceSpec) -> dict[str, Any]:
-    return {
-        "Label": spec.label,
-        "ProgramArguments": [
-            spec.python_executable,
-            "-m",
-            "skillloop.cli",
-            "--path",
-            str(spec.project_root),
-            "controller",
-            "run",
-        ],
-        "WorkingDirectory": str(spec.project_root),
-        "StartInterval": spec.interval_seconds,
-        "RunAtLoad": True,
-        "StandardOutPath": str(spec.stdout_path),
-        "StandardErrorPath": str(spec.stderr_path),
-        "EnvironmentVariables": {
-            "PYTHONUNBUFFERED": "1",
-            **({"PYTHONPATH": spec.python_path} if spec.python_path else {}),
-        },
-    }
-
-
-def default_launch_agents_dir() -> Path:
-    return Path.home() / "Library" / "LaunchAgents"
-
-
-def launchd_plist_path(spec: ServiceSpec, launch_agents_dir: str | Path | None = None) -> Path:
-    base = Path(launch_agents_dir).expanduser() if launch_agents_dir else default_launch_agents_dir()
-    label = validate_launchd_label(spec.label)
-    return base / f"{label}.plist"
-
-
-def write_launchd_service(spec: ServiceSpec, *, launch_agents_dir: str | Path | None = None) -> Path:
-    ensure_not_symlink_escape(spec.state_dir, spec.project_root, label="service state directory")
-    spec.state_dir.mkdir(parents=True, exist_ok=True)
-    ensure_not_symlink_escape(spec.state_dir, spec.project_root, label="service state directory")
-    plist_path = launchd_plist_path(spec, launch_agents_dir)
-    plist_path.parent.mkdir(parents=True, exist_ok=True)
-    with plist_path.open("wb") as fh:
-        plistlib.dump(launchd_plist(spec), fh, sort_keys=False)
-    write_service_metadata(spec, kind="launchd", path=plist_path)
-    return plist_path
-
-
 def write_service_metadata(spec: ServiceSpec, *, kind: str, path: str | Path) -> Path:
     ensure_not_symlink_escape(spec.state_dir, spec.project_root, label="service state directory")
     spec.state_dir.mkdir(parents=True, exist_ok=True)
@@ -152,34 +105,6 @@ def read_service_metadata(state_dir: str | Path) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def remove_launchd_service(*, state_dir: str | Path, launch_agents_dir: str | Path | None = None) -> list[Path]:
-    state_input = Path(state_dir).expanduser()
-    state = ensure_not_symlink_escape(state_input, state_input.parent, label="service state directory")
-    metadata = read_service_metadata(state)
-    removed: list[Path] = []
-    candidate_paths: list[Path] = []
-    if metadata and metadata.get("label"):
-        spec = build_service_spec(
-            project_root=metadata.get("project_root") or Path.cwd(),
-            state_dir=state,
-            label=str(metadata["label"]),
-            interval_seconds=int(metadata.get("interval_seconds") or DEFAULT_INTERVAL_SECONDS),
-        )
-        candidate_paths.append(launchd_plist_path(spec, launch_agents_dir))
-    for path in dict.fromkeys(candidate_paths):
-        base = Path(launch_agents_dir).expanduser() if launch_agents_dir else default_launch_agents_dir()
-        expected = resolve_under_root(base, path, label="launchd plist")
-        if expected.exists():
-            expected.unlink()
-            removed.append(expected)
-    metadata_path = state / "service.json"
-    if metadata_path.exists():
-        ensure_not_symlink_escape(metadata_path, state, label="service metadata")
-        metadata_path.unlink()
-        removed.append(metadata_path)
-    return removed
-
-
 def supported_default_kind() -> str:
     system = platform.system().lower()
     if system == "darwin":
@@ -187,3 +112,44 @@ def supported_default_kind() -> str:
     if system == "linux":
         return "systemd"
     return "unsupported"
+
+
+# Backward-compatible facade over the launchd implementation. The launchd
+# logic now lives behind the ServiceManager port in
+# skillloop.infrastructure.services.launchd; these names resolve to it so
+# existing callers (cli.py, tests) are unaffected.
+from skillloop.infrastructure.services.launchd import (  # noqa: E402
+    LaunchdServiceManager,
+    default_launch_agents_dir,
+    launchd_plist,
+    launchd_plist_path,
+    remove_launchd_service,
+    write_launchd_service,
+)
+from skillloop.infrastructure.services import (  # noqa: E402
+    available_kinds,
+    get_service_manager,
+)
+from skillloop.ports.service_manager import ServiceManager, ServiceState  # noqa: E402
+
+__all__ = [
+    "SERVICE_VERSION",
+    "DEFAULT_INTERVAL_SECONDS",
+    "ServiceSpec",
+    "ServiceManager",
+    "ServiceState",
+    "default_label",
+    "validate_launchd_label",
+    "build_service_spec",
+    "write_service_metadata",
+    "read_service_metadata",
+    "supported_default_kind",
+    "launchd_plist",
+    "default_launch_agents_dir",
+    "launchd_plist_path",
+    "write_launchd_service",
+    "remove_launchd_service",
+    "available_kinds",
+    "get_service_manager",
+    "LaunchdServiceManager",
+]

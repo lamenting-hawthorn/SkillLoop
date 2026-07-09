@@ -1,10 +1,20 @@
 import json
 import plistlib
+from pathlib import Path
+from unittest import mock
 
 import pytest
 
 from skillloop.cli import main
-from skillloop.service import build_service_spec, launchd_plist, read_service_metadata, remove_launchd_service
+from skillloop.service import (
+    build_service_spec,
+    launchd_plist,
+    read_service_metadata,
+    remove_launchd_service,
+)
+from skillloop.infrastructure.services import get_service_manager
+from skillloop.infrastructure.services.systemd import SystemdServiceManager, systemd_unit
+from skillloop.ports.service_manager import ServiceState
 
 
 def test_launchd_plist_runs_controller_tick(tmp_path):
@@ -143,3 +153,76 @@ def test_service_uninstall_rejects_symlinked_state_dir_escape(tmp_path):
 def test_service_rejects_invalid_labels(tmp_path, label):
     with pytest.raises(ValueError, match="service label"):
         build_service_spec(project_root=tmp_path, state_dir=tmp_path / ".skillloop", label=label)
+
+
+def test_systemd_unit_runs_controller_tick(tmp_path):
+    spec = build_service_spec(
+        project_root=tmp_path,
+        state_dir=tmp_path / ".skillloop",
+        interval_seconds=900,
+        label="com.skillloop.test",
+        python_executable="/usr/bin/python3",
+    )
+
+    unit = systemd_unit(spec)
+
+    assert "[Unit]" in unit and "[Service]" in unit and "[Install]" in unit
+    assert "WantedBy=default.target" in unit
+    assert "ExecStart=/usr/bin/python3 -m skillloop.cli --path" in unit
+    assert "WorkingDirectory=" in unit
+    assert str(spec.project_root) in unit.split("WorkingDirectory=")[1].splitlines()[0]
+
+
+def test_systemd_install_status_activate_uninstall_parity(tmp_path, monkeypatch):
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, *a, **k):
+        calls.append(list(cmd))
+        proc = mock.Mock()
+        proc.returncode = 0
+        return proc
+
+    monkeypatch.setattr("skillloop.infrastructure.services.systemd.subprocess.run", fake_run)
+
+    spec = build_service_spec(
+        project_root=tmp_path,
+        state_dir=tmp_path / ".skillloop",
+        interval_seconds=600,
+        label="com.skillloop.test",
+        python_executable="/usr/bin/python3",
+    )
+    user_dir = tmp_path / "systemd" / "user"
+    mgr = SystemdServiceManager()
+
+    unit_path = mgr.install(spec, launch_agents_dir=user_dir)
+    assert unit_path.exists()
+    assert unit_path.name == "com.skillloop.test.service"
+    assert unit_path.parent == user_dir
+
+    metadata = read_service_metadata(tmp_path / ".skillloop")
+    assert metadata["kind"] == "systemd"
+    assert metadata["path"] == str(unit_path)
+
+    # install must NOT auto-activate
+    assert not any("systemctl" in c for c in calls)
+
+    mgr.activate(spec, launch_agents_dir=user_dir)
+    assert ["systemctl", "--user", "daemon-reload"] in calls
+    assert ["systemctl", "--user", "enable", "--now", "com.skillloop.test.service"] in calls
+
+    state = mgr.status(spec, launch_agents_dir=user_dir)
+    assert isinstance(state, ServiceState)
+    assert state.kind == "systemd" and state.installed and state.active
+
+    removed = mgr.uninstall(spec, launch_agents_dir=user_dir)
+    assert unit_path not in removed or not unit_path.exists()
+    assert not unit_path.exists()
+    assert not (tmp_path / ".skillloop" / "service.json").exists()
+    assert ["systemctl", "--user", "disable", "com.skillloop.test.service"] in calls
+
+
+def test_service_manager_factory_exposes_both_kinds():
+    assert get_service_manager("launchd").kind == "launchd"
+    assert get_service_manager("systemd").kind == "systemd"
+    with pytest.raises(ValueError):
+        get_service_manager("windows-task-scheduler")
