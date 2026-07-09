@@ -9,6 +9,8 @@ from uuid import uuid4
 
 from skillloop.sanitize import redact_artifact_refs, redact_data, redact_secrets
 
+SCHEMA_VERSION = 2
+
 TRACE_SCHEMA_VERSION = "1.1"
 TOOL_CALL_STATUSES = {"pending", "running", "success", "error", "cancelled", "unknown"}
 PROPOSAL_STATUSES = {"pending", "approved", "applied", "rejected"}
