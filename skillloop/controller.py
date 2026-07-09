@@ -64,12 +64,7 @@ def save_controller_report(store: SkillLoopStore, report: ControllerRunReport) -
 
 
 def _evaluations_by_trace(store: SkillLoopStore, traces: list[AgentTrace]) -> dict[str, Evaluation]:
-    result: dict[str, Evaluation] = {}
-    for trace in traces:
-        latest = store.latest_evaluation(trace.id)
-        if latest is not None:
-            result[trace.id] = latest
-    return result
+    return store.latest_evaluations({trace.id for trace in traces})
 
 
 def _proposals_by_trace(store: SkillLoopStore, traces: list[AgentTrace]) -> dict[str, list[Proposal]]:
@@ -136,9 +131,11 @@ def export_dataset_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -
     dataset = policy.dataset
     if not (dataset.enabled or dataset.auto_update):
         return None
+    all_traces = store.list_traces()
+    latest_evaluations = store.latest_evaluations({trace.id for trace in all_traces})
     traces = []
-    for trace in store.list_traces():
-        latest = store.latest_evaluation(trace.id)
+    for trace in all_traces:
+        latest = latest_evaluations.get(trace.id)
         if latest is not None and _passes_dataset_gate(latest, policy):
             traces.append(trace)
     evaluations = _evaluations_by_trace(store, traces)

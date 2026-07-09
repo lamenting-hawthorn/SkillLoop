@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
@@ -44,6 +46,30 @@ def test_store_lists_evaluations_for_trace(tmp_path):
     latest = store.latest_evaluation(trace.id)
     assert latest is not None
     assert latest.score == 85
+
+
+def test_store_returns_latest_evaluations_in_bulk(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    first = AgentTrace(source="generic", messages=[AgentMessage(role="user", content="first")])
+    second = AgentTrace(source="generic", messages=[AgentMessage(role="user", content="second")])
+    store.save_evaluation(Evaluation(trace_id=first.id, score=40, created_at="2026-01-01T00:00:00+00:00"))
+    store.save_evaluation(Evaluation(trace_id=first.id, score=90, created_at="2026-01-02T00:00:00+00:00"))
+    store.save_evaluation(Evaluation(trace_id=second.id, score=70, created_at="2026-01-01T00:00:00+00:00"))
+    latest = store.latest_evaluations({first.id, second.id})
+    assert latest[first.id].score == 90
+    assert latest[second.id].score == 70
+
+
+def test_store_migrates_legacy_proposal_table(tmp_path):
+    state_dir = tmp_path / ".skillloop"
+    state_dir.mkdir()
+    with sqlite3.connect(state_dir / "skillloop.db") as connection:
+        connection.execute("CREATE TABLE proposals (id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, kind TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL)")
+    store = SkillLoopStore(tmp_path)
+    store.init()
+    with sqlite3.connect(store.db_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(proposals)")}
+    assert "content_hash" in columns
 
 
 def test_store_preserves_raw_trace_and_hashes(tmp_path):

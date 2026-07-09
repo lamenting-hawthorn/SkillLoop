@@ -8,6 +8,8 @@ from pathlib import Path
 from skillloop.fs_safety import ensure_not_symlink_escape, resolve_under_root, safe_path_segment, sha256_bytes
 from skillloop.schema import AgentTrace, Evaluation, Proposal
 
+SCHEMA_VERSION = 2
+
 
 class SkillLoopStore:
     def __init__(self, root: str | Path):
@@ -15,8 +17,11 @@ class SkillLoopStore:
         self.state_dir = self.root / ".skillloop"
         self.db_path = self.state_dir / "skillloop.db"
         self.raw_trace_dir = self.state_dir / "raw_traces"
+        self._initialized = False
 
     def init(self) -> None:
+        if self._initialized:
+            return
         ensure_not_symlink_escape(self.state_dir, self.root, label="state directory")
         self.state_dir.mkdir(parents=True, exist_ok=True)
         ensure_not_symlink_escape(self.state_dir, self.root, label="state directory")
@@ -49,6 +54,7 @@ class SkillLoopStore:
                     trace_id TEXT NOT NULL,
                     kind TEXT NOT NULL,
                     status TEXT NOT NULL,
+                    content_hash TEXT,
                     created_at TEXT NOT NULL,
                     payload TEXT NOT NULL
                 )
@@ -64,9 +70,26 @@ class SkillLoopStore:
                 )
                 """
             )
+            columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(proposals)")}
+            if "content_hash" not in columns:
+                conn.execute("ALTER TABLE proposals ADD COLUMN content_hash TEXT")
+            for proposal_id, payload in conn.execute("SELECT id, payload FROM proposals WHERE content_hash IS NULL").fetchall():
+                try:
+                    content_hash = Proposal.from_dict(json.loads(payload)).content_hash
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                conn.execute("UPDATE proposals SET content_hash = ? WHERE id = ?", (content_hash, proposal_id))
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_evaluations_trace_created ON evaluations(trace_id, created_at DESC)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_proposals_status_created ON proposals(status, created_at DESC)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_proposals_content_hash ON proposals(content_hash)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_controller_runs_started ON controller_runs(started_at DESC)")
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        self._initialized = True
 
     def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
+        connection = sqlite3.connect(self.db_path, timeout=30)
+        connection.execute("PRAGMA busy_timeout = 30000")
+        return connection
 
     def save_trace(self, trace: AgentTrace) -> str:
         self.init()
@@ -150,16 +173,38 @@ class SkillLoopStore:
         return [Evaluation.from_dict(p) for p in payloads]
 
     def latest_evaluation(self, trace_id: str) -> Evaluation | None:
-        evaluations = self.list_evaluations(trace_id)
-        return evaluations[0] if evaluations else None
+        self.init()
+        with self._connect() as conn:
+            row = conn.execute("SELECT payload FROM evaluations WHERE trace_id = ? ORDER BY created_at DESC LIMIT 1", (trace_id,)).fetchone()
+        return Evaluation.from_dict(json.loads(row[0])) if row is not None else None
+
+    def latest_evaluations(self, trace_ids: set[str] | None = None) -> dict[str, Evaluation]:
+        self.init()
+        query = "SELECT trace_id, payload FROM evaluations"
+        args: tuple[str, ...] = ()
+        if trace_ids is not None:
+            if not trace_ids:
+                return {}
+            query += f" WHERE trace_id IN ({','.join('?' for _ in trace_ids)})"
+            args = tuple(sorted(trace_ids))
+        query += " ORDER BY trace_id, created_at DESC"
+        with self._connect() as conn:
+            rows = conn.execute(query, args).fetchall()
+        latest: dict[str, Evaluation] = {}
+        for trace_id, payload in rows:
+            latest.setdefault(str(trace_id), Evaluation.from_dict(json.loads(payload)))
+        return latest
 
     def find_duplicate_proposal(self, proposal: Proposal) -> Proposal | None:
         active_statuses = {"pending", "approved", "applied"}
-        for existing in self.list_proposals(status=None):
+        self.init()
+        with self._connect() as conn:
+            rows = conn.execute("SELECT payload FROM proposals WHERE kind = ? AND content_hash = ? AND status IN (?, ?, ?)", (proposal.kind, proposal.content_hash, *sorted(active_statuses))).fetchall()
+        for row in rows:
+            existing = Proposal.from_dict(json.loads(row[0]))
             if existing.id == proposal.id:
                 continue
-            if existing.kind == proposal.kind and existing.content_hash == proposal.content_hash and existing.status in active_statuses:
-                return existing
+            return existing
         return None
 
     def save_proposal(self, proposal: Proposal) -> str:
@@ -170,8 +215,8 @@ class SkillLoopStore:
         payload = json.dumps(proposal.to_dict(), ensure_ascii=False)
         with self._connect() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO proposals (id, trace_id, kind, status, created_at, payload) VALUES (?, ?, ?, ?, ?, ?)",
-                (proposal.id, proposal.trace_id, proposal.kind, proposal.status, proposal.created_at, payload),
+                "INSERT OR REPLACE INTO proposals (id, trace_id, kind, status, content_hash, created_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (proposal.id, proposal.trace_id, proposal.kind, proposal.status, proposal.content_hash, proposal.created_at, payload),
             )
         return proposal.id
 
