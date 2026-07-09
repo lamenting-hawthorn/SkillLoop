@@ -1,10 +1,11 @@
 import sqlite3
+import json
 
 import pytest
 
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
 from skillloop.fs_safety import sha256_bytes
-from skillloop.schema import AgentMessage, AgentTrace, Evaluation, sha256_text
+from skillloop.schema import AgentMessage, AgentTrace, Evaluation, Proposal, sha256_text
 from skillloop.store import SkillLoopStore
 
 
@@ -182,3 +183,129 @@ def test_store_controller_run_prefix_search_escapes_like_wildcards(tmp_path):
     store.save_controller_run({"id": "a1b", "started_at": "2026-01-02T00:00:00+00:00"})
 
     assert store.get_controller_run("a_")["id"] == "a_b"
+
+
+def test_store_paginates_list_evaluations(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    trace = AgentTrace(source="generic", messages=[AgentMessage(role="user", content="hello")])
+    store.save_trace(trace)
+    for i in range(5):
+        store.save_evaluation(
+            Evaluation(trace_id=trace.id, score=10 * i, created_at=f"2026-01-0{i+1}T00:00:00+00:00")
+        )
+
+    first_two = store.list_evaluations(trace.id, limit=2, offset=0)
+    next_two = store.list_evaluations(trace.id, limit=2, offset=2)
+
+    assert [e.score for e in first_two] == [40, 30]
+    assert [e.score for e in next_two] == [20, 10]
+    assert len(store.list_evaluations(trace.id, limit=1, offset=10)) == 0
+
+
+def test_store_paginates_list_proposals_and_controller_runs(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    for i in range(3):
+        store.save_proposal(
+            Proposal(
+                trace_id="t",
+                kind="memory",
+                title=f"p{i}",
+                content=f"c{i}",
+                reason="r",
+                status="pending",
+            )
+        )
+        store.save_controller_run({"id": f"run-{i}", "started_at": f"2026-01-0{i+1}T00:00:00+00:00"})
+
+    assert len(store.list_proposals(status="pending", limit=1)) == 1
+    assert len(store.list_proposals(limit=2)) == 2
+    assert len(store.list_controller_runs(limit=2)) == 2
+    assert len(store.list_controller_runs(limit=10)) == 3
+
+
+def test_store_batch_inserts_traces_evaluations_proposals(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    traces = [
+        AgentTrace(source="generic", messages=[AgentMessage(role="user", content=f"m{i}")])
+        for i in range(3)
+    ]
+    saved_trace_ids = store.save_traces(traces)
+    assert saved_trace_ids == [t.id for t in traces]
+    assert len(store.list_traces()) == 3
+
+    evals = [Evaluation(trace_id=t.id, score=50) for t in traces]
+    assert store.save_evaluations(evals) == [e.id for e in evals]
+    assert len(store.list_evaluations()) == 3
+
+    proposals = [
+        Proposal(trace_id=t.id, kind="memory", title="t", content=f"c{i}", reason="r")
+        for i, t in enumerate(traces)
+    ]
+    assert store.save_proposals(proposals) == [p.id for p in proposals]
+    assert len(store.list_proposals()) == 3
+
+
+def test_store_streams_large_jsonl_ingest_and_export(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    jsonl = tmp_path / "in.jsonl"
+    lines = [
+        AgentTrace(source="generic", messages=[AgentMessage(role="user", content=f"m{i}")]).to_dict()
+        for i in range(20)
+    ]
+    jsonl.write_text("\n".join(json.dumps(d, ensure_ascii=False) for d in lines) + "\n", encoding="utf-8")
+
+    ingested = store.ingest_jsonl_traces(jsonl)
+    assert ingested == 20
+    assert len(store.list_traces()) == 20
+
+    out = tmp_path / "out.jsonl"
+    count = store.stream_export_traces(out)
+    assert count == 20
+    exported = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(exported) == 20
+
+
+def test_store_transaction_rolls_back_on_error(tmp_path):
+    store = SkillLoopStore(tmp_path)
+    trace = AgentTrace(source="generic", messages=[AgentMessage(role="user", content="hello")])
+    store.save_trace(trace)
+
+    class _Boom(Exception):
+        pass
+
+    with pytest.raises(_Boom):
+        with store.transaction():
+            store.save_evaluation(Evaluation(trace_id=trace.id, score=99))
+            raise _Boom()
+
+    assert store.list_evaluations(trace.id) == []
+
+
+def test_store_upgrade_from_v1_to_v2_schema_version(tmp_path):
+    state_dir = tmp_path / ".skillloop"
+    state_dir.mkdir()
+    legacy_db = state_dir / "skillloop.db"
+    with sqlite3.connect(legacy_db) as conn:
+        conn.execute(
+            "CREATE TABLE traces (id TEXT PRIMARY KEY, source TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE evaluations (id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, score INTEGER NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE proposals (id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, kind TEXT NOT NULL, "
+            "status TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE controller_runs (id TEXT PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT, payload TEXT NOT NULL)"
+        )
+        conn.execute("PRAGMA user_version = 1")
+
+    store = SkillLoopStore(tmp_path)
+    store.init()
+
+    with sqlite3.connect(store.db_path) as conn:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(proposals)")}
+    assert version == 2
+    assert "content_hash" in columns

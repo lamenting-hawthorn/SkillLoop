@@ -193,38 +193,39 @@ def export_dataset_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -
 def controller_tick(store: SkillLoopStore, policy: SkillLoopPolicy) -> ControllerRunReport:
     store.init()
     report = ControllerRunReport(policy=policy.to_dict())
-    try:
-        ingested = ingest_from_policy(store, policy)
-        report.actions.append({"type": "ingest", "count": len(ingested), "trace_ids": ingested})
-    except Exception as exc:  # noqa: BLE001 - controller must report and continue to safe later stages
-        report.errors.append(f"ingest:{type(exc).__name__}:{exc}")
+    with store.transaction():
+        try:
+            ingested = ingest_from_policy(store, policy)
+            report.actions.append({"type": "ingest", "count": len(ingested), "trace_ids": ingested})
+        except Exception as exc:  # noqa: BLE001 - controller must report and continue to safe later stages
+            report.errors.append(f"ingest:{type(exc).__name__}:{exc}")
 
-    evaluation_policy = policy.evaluation
-    loop_summary: LoopRunSummary = run_outer_loop(
-        store,
-        evaluator=evaluation_policy.evaluator,
-        min_score=evaluation_policy.min_score,
-        condition=evaluation_policy.condition,
-        only_unevaluated=evaluation_policy.only_unevaluated,
-        distill_failures=evaluation_policy.distill_failures,
-        limit=evaluation_policy.limit,
-    )
-    report.actions.append({"type": "evaluate", **loop_summary.to_dict()})
+        evaluation_policy = policy.evaluation
+        loop_summary: LoopRunSummary = run_outer_loop(
+            store,
+            evaluator=evaluation_policy.evaluator,
+            min_score=evaluation_policy.min_score,
+            condition=evaluation_policy.condition,
+            only_unevaluated=evaluation_policy.only_unevaluated,
+            distill_failures=evaluation_policy.distill_failures,
+            limit=evaluation_policy.limit,
+        )
+        report.actions.append({"type": "evaluate", **loop_summary.to_dict()})
 
-    try:
-        dataset_summary = export_dataset_from_policy(store, policy)
-        if dataset_summary is not None:
-            report.actions.append({"type": "dataset_export", **dataset_summary})
-    except Exception as exc:  # noqa: BLE001
-        report.errors.append(f"dataset:{type(exc).__name__}:{exc}")
+        try:
+            dataset_summary = export_dataset_from_policy(store, policy)
+            if dataset_summary is not None:
+                report.actions.append({"type": "dataset_export", **dataset_summary})
+        except Exception as exc:  # noqa: BLE001
+            report.errors.append(f"dataset:{type(exc).__name__}:{exc}")
 
-    report.summary = {
-        "errors": len(report.errors),
-        "traces_seen": loop_summary.traces_seen,
-        "traces_evaluated": loop_summary.traces_evaluated,
-        "proposals_created": loop_summary.proposals_created,
-        "requires_review": len(store.list_proposals(status="pending")),
-    }
-    report.finish()
-    save_controller_report(store, report)
+        report.summary = {
+            "errors": len(report.errors),
+            "traces_seen": loop_summary.traces_seen,
+            "traces_evaluated": loop_summary.traces_evaluated,
+            "proposals_created": loop_summary.proposals_created,
+            "requires_review": len(store.list_proposals(status="pending")),
+        }
+        report.finish()
+        save_controller_report(store, report)
     return report
