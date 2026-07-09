@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11', '3.12']
+        python-version: ['3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,6 +25,13 @@ jobs:
         run: python -m compileall skillloop tests -q
       - name: Packaging check
         run: python -m pip wheel . --no-deps -w /tmp/skillloop-wheel-check
+      - name: Clean wheel install
+        run: |
+          python -m venv /tmp/skillloop-wheel-venv
+          /tmp/skillloop-wheel-venv/bin/python -m pip install /tmp/skillloop-wheel-check/*.whl
+          cd /tmp
+          /tmp/skillloop-wheel-venv/bin/skillloop --version
+          /tmp/skillloop-wheel-venv/bin/python -m skillloop --help
       - name: Smoke test CLI workflow
         run: |
           tmp=$(mktemp -d)

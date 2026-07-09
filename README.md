@@ -189,6 +189,15 @@ Approved artifacts are currently exported locally under:
 .skillloop/approved/skill/*.md
 ```
 
+OKF bundle export packages approved proposals as a conformant [Open Knowledge Format v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) bundle — a portable, git-diffable directory of markdown files with YAML frontmatter:
+
+```bash
+skillloop --path . export okf --out okf-bundle/
+```
+
+This produces a self-contained knowledge bundle with `index.md`, `log.md`, and
+individual concept files that any OKF-compliant agent runtime can consume.
+
 ### Dataset Export
 
 SkillLoop can export reviewed training-data candidates:
@@ -266,15 +275,14 @@ an uncontrolled mutation layer.
 SkillLoop requires Python 3.11+.
 
 ```bash
-git clone <repo-url>
-cd skillloop
-python -m pip install -e '.[dev]'
+pipx install git+https://github.com/lamenting-hawthorn/skillloop.git
+skillloop --version
 ```
 
 You can run the CLI as either:
 
 ```bash
-python -m skillloop.cli --path . <command>
+python -m skillloop --path . <command>
 ```
 
 or:
@@ -283,13 +291,17 @@ or:
 skillloop --path . <command>
 ```
 
+Initialize and verify any project with `skillloop --path /path/to/project init`
+followed by `skillloop --path /path/to/project doctor`. For development, clone
+the repository and run `python -m pip install -e '.[dev]'`.
+
 ## Deploy SkillLoop Locally
 
 SkillLoop is deployed as a project-local sidecar, not as a hosted cloud service.
 The current deployment path is intentionally small:
 
 ```bash
-python -m pip install -e .
+pipx install git+https://github.com/lamenting-hawthorn/skillloop.git
 skillloop --path /path/to/project setup --connect hermes --start --auto-export
 ```
 
@@ -317,8 +329,7 @@ Current deployment support:
 - macOS: launchd plist generation is implemented.
 - Linux: systemd/cron generation is not implemented yet.
 - Cloud: not required; SkillLoop is local-first by design.
-- Install path today: editable install from a cloned repo. A `pipx install
-  git+...` / wheel distribution path is a next packaging task.
+- Install path: isolated GitHub CLI install, wheel install, or editable checkout.
 - Production hardening: filesystem write/delete boundaries are guarded for
   controller-managed artifacts, approved exports, raw trace preservation, and
   service uninstall paths.
@@ -378,6 +389,7 @@ configured evaluation condition and score gate.
 
 ```text
 skillloop --path <project-root> init
+skillloop --path <project-root> doctor [--json]
 skillloop --path <project-root> setup --connect hermes [--start] [--auto-export]
 skillloop --path <project-root> status [--json]
 
@@ -399,6 +411,7 @@ skillloop --path <project-root> apply
 
 skillloop --path <project-root> export sft --out <path> [--min-score N] [--splits train=0.8,validation=0.1,test=0.1]
 skillloop --path <project-root> export dpo --out <path> [--min-score N]
+skillloop --path <project-root> export okf --out <path>
 
 skillloop --path <project-root> benchmark [--baseline rubric_legacy] [--candidates rubric] [--out benchmark.json]
 skillloop --path <project-root> training-config trl|unsloth|axolotl --dataset-manifest <manifest> --base-model <model> --output-dir <dir> --config-dir <dir>

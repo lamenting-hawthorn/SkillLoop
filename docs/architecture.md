@@ -243,10 +243,10 @@ SkillLoop does not silently start services. It records metadata and prints the
 exact OS command to load or unload the service. Linux service generation is still
 future work.
 
-The current deployment story assumes a cloned repo and editable Python install.
-A packaged install path, such as `pipx install git+...` or a wheel release,
-should come before advertising SkillLoop as a one-command install for external
-users.
+The package supports GitHub CLI installs, wheels, editable checkouts, and both
+`skillloop` and `python -m skillloop` entry points. `skillloop doctor` verifies
+deployment health. SQLite schema changes migrate in place, and indexed bulk
+evaluation reads avoid per-trace export queries.
 
 ## Boundary with Hermes
 

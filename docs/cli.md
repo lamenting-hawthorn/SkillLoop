@@ -9,7 +9,7 @@ skillloop --path . <command>
 Equivalent module form:
 
 ```bash
-python -m skillloop.cli --path . <command>
+python -m skillloop --path . <command>
 ```
 
 ## Local Deployment
@@ -17,7 +17,7 @@ python -m skillloop.cli --path . <command>
 SkillLoop deploys as a project-local sidecar. The current one-time setup path is:
 
 ```bash
-python -m pip install -e .
+pipx install git+https://github.com/lamenting-hawthorn/skillloop.git
 skillloop --path /path/to/project setup --connect hermes --start --auto-export
 ```
 
@@ -45,8 +45,7 @@ Current deployment scope:
 - No cloud service is required.
 - SkillLoop does not mutate Hermes memory, skills, config, cron jobs, tools, or
   model state.
-- The current install story assumes a cloned repo and editable install. A stable
-  `pipx install git+...` or wheel-based path is future packaging work.
+- GitHub, wheel, and editable installs expose the same CLI.
 
 ## `init`
 
@@ -61,6 +60,12 @@ Creates:
 ```text
 .skillloop/skillloop.db
 ```
+
+## `doctor`
+
+Runs read-only package, Python, project, SQLite, policy, output-boundary, and
+connector checks. Use `--json` for automation; failed required checks return a
+non-zero exit code.
 
 ## `setup`
 

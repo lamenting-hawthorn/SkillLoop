@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
-### Changed
-
-- Rewrote public documentation to reflect the current SkillLoop sidecar architecture, Hermes setup/status/controller UX, loop primitives, dataset manifests, training config generation, and safety boundaries.
+- Installable via `pipx install git+https://github.com/lamenting-hawthorn/skillloop` (GitHub) and wheel.
+- Added `python -m skillloop` as a stable module entry point.
+- Added `skillloop --version` and `skillloop doctor` diagnostics commands.
+- SQLite store upgraded to schema v2 with automatic migration, new indexes, bulk insert/query paths, and a busy-timeout.
+- Added Python 3.13 to CI matrix and a clean-wheel build check.
+- Rewrote public documentation to reflect the sidecar architecture, Hermes UX, loop primitives, dataset manifests, training config generation, and safety boundaries.
 - Changed project license posture from proprietary/all-rights-reserved to Apache-2.0.
 
 ## 0.1.0 - MVP

@@ -18,7 +18,11 @@ def test_approved_proposals_export_inside_project(tmp_path):
     written = export_approved(store)
 
     assert len(written) == 1
-    assert written[0].read_text() == "User prefers concise answers"
+    content = written[0].read_text()
+    assert content.startswith("---\n")
+    assert "proposal_id:" in content
+    assert "source: skillloop_proposal" in content
+    assert content.endswith("User prefers concise answers")
     assert Path(written[0]).resolve().is_relative_to(tmp_path.resolve())
     applied = store.get_proposal(proposal.id)
     assert applied.status == "applied"

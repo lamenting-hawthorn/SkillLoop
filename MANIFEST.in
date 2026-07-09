@@ -1,0 +1,22 @@
+# Include the package source
+include pyproject.toml
+include README.md
+include LICENSE
+include CHANGELOG.md
+recursive-include skillloop *.py
+
+# Exclude research notes, generated data, local state, and private artifacts
+prune data
+prune .venv
+prune .worktrees
+prune agendex
+prune references
+prune .commandcode
+prune skillloop documentation
+prune .skillloop
+prune skillloop.egg-info
+exclude docs/plan-*.md
+global-exclude *.db
+global-exclude *.sqlite3
+global-exclude *.pyc
+global-exclude __pycache__

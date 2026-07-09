@@ -4,19 +4,34 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skillloop"
-version = "0.1.0"
+version = "0.2.0"
 description = "A local learning governor for agent traces, evaluation, proposals, and training-data preparation."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
 authors = [{name = "Raghav"}]
 dependencies = []
+keywords = ["ai-agents", "evaluation", "machine-learning", "training-data"]
 classifiers = [
-    "License :: OSI Approved :: Apache Software License",
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
+[project.urls]
+Homepage = "https://github.com/lamenting-hawthorn/skillloop"
+Documentation = "https://github.com/lamenting-hawthorn/skillloop#readme"
+Issues = "https://github.com/lamenting-hawthorn/skillloop/issues"
+Source = "https://github.com/lamenting-hawthorn/skillloop"
+
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8,<10"]
 
 [project.scripts]
 skillloop = "skillloop.cli:main"
@@ -24,6 +39,10 @@ skillloop = "skillloop.cli:main"
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["skillloop"]
 
 [tool.setuptools.packages.find]
 where = ["."]
