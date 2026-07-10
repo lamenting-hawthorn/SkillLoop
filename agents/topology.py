@@ -8,12 +8,12 @@ assignment and before merge.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Callable
+from enum import StrEnum
 
 
-class Role(str, Enum):
+class Role(StrEnum):
     IMPLEMENTATION = "implementation"
     VIEWER = "viewer"
     ORCHESTRATOR = "orchestrator"
@@ -40,7 +40,9 @@ class Agent:
 
 _IMPL_CONSTRAINTS = [
     Constraint("no_scope_overlap", "File scope must not intersect any other implementation agent."),
-    Constraint("backward_compat_cli", "Public CLI syntax and persisted schema must stay compatible."),
+    Constraint(
+        "backward_compat_cli", "Public CLI syntax and persisted schema must stay compatible."
+    ),
     Constraint("review_gated_writes", "Side effects remain review-gated and project-local."),
     Constraint("atomic_migrations", "Persistence migrations must be explicit and atomic."),
 ]
@@ -89,7 +91,11 @@ SERVICES = Agent(
     id="impl.services",
     role=Role.IMPLEMENTATION,
     task="Phase 5: define ServiceManager port; keep launchd as one impl; add systemd user-service for Linux; install/status/uninstall parity; explicit activation only. No OS-specific code in application logic.",
-    scope=["skillloop/service.py", "skillloop/ports/service_manager.py", "skillloop/infrastructure/services/**"],
+    scope=[
+        "skillloop/service.py",
+        "skillloop/ports/service_manager.py",
+        "skillloop/infrastructure/services/**",
+    ],
     depends_on=["impl.phase0"],
     constraints=_IMPL_CONSTRAINTS,
     worktree=".worktrees/services",

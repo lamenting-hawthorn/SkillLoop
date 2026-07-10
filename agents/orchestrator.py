@@ -3,7 +3,6 @@ dispatches viewers on events, and requires viewer approval before merge."""
 
 from __future__ import annotations
 
-import fnmatch
 from dataclasses import dataclass, field
 
 from .eventbus import Event, EventBus, EventType
@@ -12,7 +11,6 @@ from .topology import (
     IMPLEMENTATION_AGENTS,
     VIEWER_AGENTS,
     Agent,
-    Role,
 )
 
 
@@ -80,13 +78,14 @@ class Orchestrator:
             self._blockers.append(event)
         elif event.type == EventType.ARTIFACT_COMMITTED:
             for viewer in VIEWER_AGENTS:
-                self.bus.publish(
-                    Event(EventType.TASK_STARTED, viewer.id, {"target": event.source})
-                )
+                self.bus.publish(Event(EventType.TASK_STARTED, viewer.id, {"target": event.source}))
 
     def can_merge(self, agent_id: str) -> bool:
         needed = {v.id for v in VIEWER_AGENTS}
-        return needed.issubset(self._approved) and not self._blockers
+        ok = needed.issubset(self._approved) and not self._blockers
+        if ok:
+            self._done.add(agent_id)
+        return ok
 
     def report(self) -> str:
         lines = ["Orchestrator state", "=" * 40]

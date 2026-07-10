@@ -2,6 +2,7 @@ target-version = "py311"
 line-length = 100
 
 [lint]
+exclude = ["agents"]
 select = ["ALL"]
 ignore = [
     "D",       # pydocstyle

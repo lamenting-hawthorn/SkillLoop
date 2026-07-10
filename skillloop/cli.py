@@ -61,3 +61,7 @@ __all__ = [
     "cmd_training_config",
     "main",
 ]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

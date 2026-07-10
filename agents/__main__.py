@@ -7,8 +7,8 @@ import sys
 from .orchestrator import Orchestrator
 from .topology import (
     IMPLEMENTATION_AGENTS,
-    VIEWER_AGENTS,
     ORCHESTRATOR,
+    VIEWER_AGENTS,
 )
 
 
