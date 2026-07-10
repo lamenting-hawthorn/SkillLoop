@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+- Added GitHub release-readiness artifacts: issue templates, PR template, security and
+  supported-versions policy, a tagged-release pipeline (`release.yml`), and compatibility
+  / migration docs.
+- Documented the v1 → v2 SQLite migration and the `doctor` pre-flight command in
+  [docs/migration.md](docs/migration.md).
+- Added a compatibility matrix in [docs/compatibility.md](docs/compatibility.md)
+  (Python 3.11–3.13, macOS/Linux/Windows, install methods).
+- Install from a pinned tag:
+
+  ```bash
+  pipx install git+https://github.com/lamenting-hawthorn/skillloop.git@v0.2.0
+  ```
+
 ## 0.2.0
 
 - Installable via `pipx install git+https://github.com/lamenting-hawthorn/skillloop` (GitHub) and wheel.
