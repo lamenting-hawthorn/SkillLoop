@@ -6,6 +6,68 @@ The runtime executes work. SkillLoop reads completed traces, evaluates them, pro
 
 Current primary runtime integration: Hermes Agent via read-only `state.db` ingestion.
 
+## Layered architecture
+
+SkillLoop is a layered modular-monolith. Dependencies flow downward only; each layer may import the layer directly below it but not upward. Domain code is pure and never imports infrastructure.
+
+```mermaid
+flowchart TB
+  subgraph IF["interfaces/ (parsing + presentation only)"]
+    CLI["interfaces/cli\n(one module per command group)"]
+  end
+  subgraph APP["application/ (use-case orchestration)"]
+    ING[ingest] EVAL[evaluate] DIS[distill]
+    REV[review] EXP[export] CON[controller]
+    REQ["requests.py\ntyped request objects"]
+  end
+  subgraph DOM["domain/ (pure, no I/O)"]
+    M[policy.py] C[conditions.py] S[schema.py]
+  end
+  subgraph PORTS["ports/ (interfaces only)"]
+    SM[service_manager.py\nServiceManager ABC]
+  end
+  subgraph INF["infrastructure/ (adapters)"]
+    SQL[sqlite/\nrepository + migrations]
+    SVC[services/\nlaunchd + systemd]
+    ADP[adapters/\ngeneric_jsonl + hermes]
+  end
+  CLI --> APP
+  APP --> DOM
+  APP -.via ports.-> PORTS
+  PORTS -.implemented by.-> INF
+  APP --> INF
+  classDef dom fill:#1b3a4b,stroke:#4ea1d3,color:#fff;
+  classDef port fill:#2d3a2e,stroke:#7bbf6a,color:#fff;
+  classDef inf fill:#3a2a2a,stroke:#d38a4e,color:#fff;
+  class M,C,S dom;
+  class SM port;
+  class SQL,SVC,ADP inf;
+```
+
+Layer rules:
+
+- **Domain** (`policy.py`, `conditions.py`, `schema.py`) must not import `sqlite3`, `argparse`, `launchd`, `subprocess`, or Hermes. It is pure logic and dataclasses.
+- **Application** services coordinate use cases but own no infrastructure details. CLI command modules only translate `argparse.Namespace` into typed request objects and render output.
+- **Ports** define infrastructure interfaces (`ServiceManager`) with no I/O.
+- **Infrastructure** adapters implement the ports: `infrastructure/sqlite/` (repository + versioned migration registry), `infrastructure/services/` (launchd + systemd), and `adapters/` (trace ingestion).
+- **CLI** modules contain parsing and presentation only; orchestration lives in `application/`.
+- Backward-compatible shims (`store.py`, `cli.py`, `service.py`) re-export the new locations so existing imports keep working until a major release.
+
+## Module layout
+
+| Package | Responsibility |
+|---------|---------------|
+| `skillloop/interfaces/cli/` | argparse parsing + presentation, one module per command group (init, doctor, setup, status, ingest, evaluate, distill, review, export, dataset, loop, controller, service) + `main.py` dispatcher |
+| `skillloop/application/` | use-case orchestration (ingest, evaluate, distill, review, export, controller, loop, benchmark, training, service) + `requests.py` typed request dataclasses |
+| `skillloop/ports/` | infrastructure interfaces — `service_manager.py` (`ServiceManager` ABC) |
+| `skillloop/infrastructure/sqlite/` | `repository.py` (SQLite I/O, batch ops, pagination, streaming) + `migrations.py` (versioned, atomic, idempotent migration registry) |
+| `skillloop/infrastructure/services/` | `launchd.py` (macOS) + `systemd.py` (Linux) implementing `ServiceManager` |
+| `skillloop/adapters/` | trace ingestion: `generic_jsonl`, `hermes` |
+| `skillloop/diagnostics.py` | `skillloop doctor` read-only health checks |
+| `skillloop/errors.py` | error taxonomy: `ConfigError`, `InputError`, `PersistenceError`, `ConnectorError`, `PolicyError` |
+| `skillloop/fs_safety.py` | atomic writes, conservative permissions, symlink guards |
+| `skillloop/sanitize.py` | secret + PII redaction, sanitized error reports |
+
 ## Design goals
 
 - Runtime-agnostic trace ingestion
@@ -214,7 +276,13 @@ The outer-loop primitives support scheduled local evaluation/distillation passes
 - forbidden tags
 - max iterations
 
-These are local scheduling primitives. Platform service installation is handled separately by `skillloop.service`: on macOS, SkillLoop can write a launchd plist plus `.skillloop/service.json` metadata for recurring controller ticks. The CLI prints the exact `launchctl` commands instead of silently loading or unloading OS services.
+These are local scheduling primitives. Platform service installation is handled
+behind the `skillloop.ports.ServiceManager` port. Two implementations ship:
+`infrastructure/services/launchd.py` (macOS) and `infrastructure/services/systemd.py`
+(Linux user-service). Both expose `install`/`status`/`uninstall` with explicit
+activation — SkillLoop never silently loads or starts an OS service. The CLI
+prints the exact OS command instead. `skillloop.service` is a backward-compatible
+facade re-exporting the implementations.
 
 ## Deployment Model
 
@@ -239,9 +307,15 @@ For recurring macOS use, the service layer can generate launchd metadata:
 skillloop --path /path/to/project service install --kind launchd --interval-seconds 3600
 ```
 
+For recurring Linux use, the systemd user-service implementation is shipped:
+
+```bash
+skillloop --path /path/to/project service install --kind systemd --interval-seconds 3600
+```
+
 SkillLoop does not silently start services. It records metadata and prints the
-exact OS command to load or unload the service. Linux service generation is still
-future work.
+exact OS command to load or unload the service. Both macOS launchd and Linux
+systemd are supported behind the `ServiceManager` port.
 
 The package supports GitHub CLI installs, wheels, editable checkouts, and both
 `skillloop` and `python -m skillloop` entry points. `skillloop doctor` verifies
@@ -265,6 +339,8 @@ This boundary is deliberate: it keeps the learning layer inspectable, reviewable
 5. Add evaluator staleness detection when evaluator code/provenance changes.
 6. Add stronger evidence-trust scoring so learning artifacts depend on tool/user evidence rather than assistant claims.
 7. Add approval-gated training plans only after readiness, cost, evaluation, and promotion gates exist.
-8. Add Linux service generation (`systemd` unit or cron) after the macOS launchd path has had more real local use.
+8. Add evaluator staleness detection when evaluator code/provenance changes.
+9. Add stronger evidence-trust scoring so learning artifacts depend on tool/user evidence rather than assistant claims.
+10. Add approval-gated training plans only after readiness, cost, evaluation, and promotion gates exist.
 
 The macOS launchd path has passed an isolated real-system smoke test against local Hermes `state.db`: controller tick, status/history/show, dataset manifest generation, service plist generation, service status, and service uninstall all succeeded without loading a persistent OS service.

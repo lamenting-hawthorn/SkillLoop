@@ -12,6 +12,14 @@ Equivalent module form:
 python -m skillloop --path . <command>
 ```
 
+`python -m skillloop.cli` also works (backward-compatible entry point).
+
+The CLI is split into focused modules: `skillloop/interfaces/cli/` holds one
+module per command group (parsing + presentation only), `skillloop/application/`
+holds use-case orchestration and typed request objects, and `skillloop/cli.py`
+is a thin re-export preserving the `skillloop.cli:main` console-script entry
+point. All command syntax and flags are backward-compatible.
+
 ## Local Deployment
 
 SkillLoop deploys as a project-local sidecar. The current one-time setup path is:
@@ -35,13 +43,22 @@ skillloop --path /path/to/project service install --kind launchd --interval-seco
 skillloop --path /path/to/project service status
 ```
 
-`service install` writes a launchd plist and `.skillloop/service.json`, then
-prints the exact `launchctl` command. It does not silently load the service.
+For recurring controller ticks on Linux:
+
+```bash
+skillloop --path /path/to/project service install --kind systemd --interval-seconds 3600
+skillloop --path /path/to/project service status
+```
+
+`service install` writes the platform service file (launchd plist or systemd
+unit) and `.skillloop/service.json` metadata, then prints the exact OS command
+to load it. It does not silently load the service. Both implementations live
+behind the `ServiceManager` port in `skillloop/infrastructure/services/`.
 
 Current deployment scope:
 
 - macOS launchd plist generation is implemented.
-- Linux systemd/cron generation is not implemented yet.
+- Linux systemd user-service generation is implemented.
 - No cloud service is required.
 - SkillLoop does not mutate Hermes memory, skills, config, cron jobs, tools, or
   model state.

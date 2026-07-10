@@ -327,7 +327,7 @@ SkillLoop does not silently start OS services or mutate global Hermes memory.
 Current deployment support:
 
 - macOS: launchd plist generation is implemented.
-- Linux: systemd/cron generation is not implemented yet.
+- Linux: systemd user-service generation is implemented (`service install --kind systemd`).
 - Cloud: not required; SkillLoop is local-first by design.
 - Install path: isolated GitHub CLI install, wheel install, or editable checkout.
 - Production hardening: filesystem write/delete boundaries are guarded for
@@ -430,33 +430,57 @@ See `docs/cli.md` for the full command reference.
 
 ## Repository Layout
 
+SkillLoop follows a layered modular-monolith: CLI/interfaces translate arguments into typed application requests; application services orchestrate use cases over domain models and policies; ports define infrastructure interfaces; infrastructure adapters implement the ports for SQLite, the filesystem, Hermes, and OS services.
+
 ```text
 skillloop/
-  adapters/          Trace ingestion adapters
-  apply/             Review-approved filesystem exports
-  distill/           Memory and skill proposal generation
-  eval/              Deterministic evaluators, registry, structured evidence
-  export/            SFT and DPO dataset exporters
-  review/            Proposal review queue helpers
-  benchmark.py       Replay benchmark comparing evaluator versions
-  cli.py             Command-line interface
-  conditions.py      Declarative done/stopped/failing conditions
-  controller.py      Policy-driven ingest/eval/distill/export tick
-  dataset_readiness.py Report-only readiness checks for controller-managed datasets
-  dataset.py         Dataset split, manifest, provenance, and stats helpers
-  loop.py            Outer-loop scheduling primitives
-  policy.py          Conservative controller policy schema
-  provenance.py      Component provenance and source hashing
-  sanitize.py        Secret redaction
-  schema.py          Normalized trace/evaluation/proposal dataclasses
-  service.py         Launchd service metadata/plist generation
-  store.py           SQLite persistence layer
-  training_config.py Training config generation only
+  interfaces/
+    cli/            argparse parsing + presentation only (one module per command group)
+      main.py       dispatcher + build_parser
+      init.py doctor.py setup.py status.py ingest.py evaluate.py
+      distill.py review.py export.py dataset.py loop.py
+      controller.py service.py
+  application/       use-case orchestration + typed request objects
+    requests.py     SetupRequest, IngestionRequest, ExportRequest, ...
+    ingest.py evaluate.py distill.py review.py export.py
+    controller.py loop.py benchmark.py training.py service.py
+  ports/            infrastructure interfaces (no I/O)
+    service_manager.py   ServiceManager ABC: install/activate/status/uninstall
+  infrastructure/
+    sqlite/         repository.py + migrations.py (versioned migration registry)
+    services/       launchd.py + systemd.py (ServiceManager implementations)
+    (filesystem + hermes adapters remain under skillloop/adapters/)
+  domain/           (conceptual) policy.py, conditions.py, schema.py — pure, no I/O
+  adapters/         trace ingestion adapters (generic_jsonl, hermes)
+  apply/            review-approved filesystem exports
+  distill/          memory and skill proposal generation
+  eval/             deterministic evaluators, registry, structured evidence
+  export/           SFT, DPO, and OKF dataset exporters
+  review/           proposal review queue helpers
+  benchmark.py      replay benchmark comparing evaluator versions
+  cli.py            thin re-export of interfaces.cli (backward compat entry point)
+  conditions.py     declarative done/stopped/failing conditions
+  controller.py     policy-driven ingest/eval/distill/export tick (atomic transaction)
+  dataset_readiness.py  report-only readiness checks
+  dataset.py        dataset split, manifest, provenance, and stats helpers
+  diagnostics.py    `doctor` health checks
+  errors.py         error taxonomy (Config/Input/Persistence/Connector/Policy)
+  fs_safety.py      atomic writes, conservative permissions, symlink guards
+  loop.py            outer-loop scheduling primitives
+  policy.py          conservative controller policy schema (validated fields/adapters)
+  provenance.py      component provenance and source hashing
+  py.typed           PEP 561 marker for inline types
+  sanitize.py        secret + PII redaction
+  schema.py          normalized trace/evaluation/proposal dataclasses (SCHEMA_VERSION=2)
+  service.py         backward-compat facade re-exporting ServiceManager impls
+  store.py           backward-compat shim delegating to infrastructure/sqlite
+  training_config.py training config generation only
 examples/
   traces/            Sample input traces
-docs/                Architecture, CLI, safety, and schema documentation
+docs/                Architecture, CLI, safety, schema, compatibility, migration docs
 references/          Reference Hermes skills and analysis artifacts
-tests/               Pytest coverage
+tests/               Pytest coverage (145 tests, E2E + backward-compat)
+.github/             Issue/PR templates, SECURITY, SUPPORTED_VERSIONS, CI, release workflow
 ```
 
 ## Current Roadmap
@@ -548,13 +572,23 @@ Actual training should remain manual/approved at first.
 
 ### 7. Operational Hardening
 
-Planned hardening includes:
+Shipped in 0.2.0:
 
-- Linux service generation
-- SQLite migrations
-- stronger indexes
+- Linux systemd user-service generation (behind the `ServiceManager` port)
+- SQLite schema v2 with a versioned migration registry (atomic, idempotent)
+- indexes on evaluations, proposals, and controller history
+- bulk latest-evaluation queries (no per-trace export/controller N+1)
+- SQLite busy timeout for concurrent local processes
+- atomic JSON/config writes (temp-file + rename)
+- error taxonomy (Config/Input/Persistence/Connector/Policy)
+- PII redaction + policy field/adapter validation
+- Ruff + mypy (typed boundaries) + pytest + coverage CI across Python 3.11–3.13
+- E2E + backward-compatibility test coverage
+- `skillloop doctor` pre-flight health check
+
+Remaining hardening:
+
 - cost tracking before LLM evaluators
-- stronger redaction and privacy checks
 - more robust trace failure recovery
 
 ## Known Limitations
@@ -566,7 +600,7 @@ SkillLoop is early and intentionally conservative.
 - DPO export only works when explicit preference pairs exist in trace metadata.
 - The project does not yet include a typed-memory connector.
 - The project does not yet include a dataset readiness judge.
-- Linux service generation is not implemented yet.
+- Linux systemd service generation is implemented behind the `ServiceManager` port.
 - Redaction is a safety net, not a complete DLP system.
 - Training configs can be generated, but training does not run automatically.
 
