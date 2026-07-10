@@ -36,11 +36,21 @@ def test_loop_schedule_status_and_forced_tick(tmp_path, capsys):
     trace_path = _write_trace(tmp_path, assistant_text="Done. Verified with tests.")
     assert main(["--path", str(tmp_path), "ingest", "generic", str(trace_path)]) == 0
 
-    assert main([
-        "--path", str(tmp_path), "loop", "schedule",
-        "--interval", "daily",
-        "--condition", '{"score_gte":70,"required_tags":["has_final_answer"],"forbidden_tags":["tool_failure"],"max_iterations":3}',
-    ]) == 0
+    assert (
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "loop",
+                "schedule",
+                "--interval",
+                "daily",
+                "--condition",
+                '{"score_gte":70,"required_tags":["has_final_answer"],"forbidden_tags":["tool_failure"],"max_iterations":3}',
+            ]
+        )
+        == 0
+    )
     schedule_output = capsys.readouterr().out
     assert "loop_schedule.json" in schedule_output
     assert (tmp_path / ".skillloop" / "loop_schedule.json").exists()
@@ -73,27 +83,50 @@ def test_loop_condition_failure_and_max_iterations_stop(tmp_path, capsys):
     trace_path = _write_trace(tmp_path, assistant_text="error failed")
     assert main(["--path", str(tmp_path), "ingest", "generic", str(trace_path)]) == 0
 
-    assert main([
-        "--path", str(tmp_path), "loop", "run",
-        "--all",
-        "--min-score", "95",
-        "--max-iterations", "1",
-        "--no-distill-failures",
-    ]) == 0
+    assert (
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "loop",
+                "run",
+                "--all",
+                "--min-score",
+                "95",
+                "--max-iterations",
+                "1",
+                "--no-distill-failures",
+            ]
+        )
+        == 0
+    )
     first = json.loads(capsys.readouterr().out.split("\n", 1)[1])
     assert first["failing_traces"]
     assert first["stopped_traces"] == []
     assert first["evaluations"][0]["run_condition"]["result"]["should_continue"] is True
 
-    assert main([
-        "--path", str(tmp_path), "loop", "run",
-        "--all",
-        "--min-score", "95",
-        "--max-iterations", "1",
-        "--no-distill-failures",
-    ]) == 0
+    assert (
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "loop",
+                "run",
+                "--all",
+                "--min-score",
+                "95",
+                "--max-iterations",
+                "1",
+                "--no-distill-failures",
+            ]
+        )
+        == 0
+    )
     second = json.loads(capsys.readouterr().out)
     assert second["failing_traces"]
     assert second["stopped_traces"]
     assert second["evaluations"][0]["run_condition"]["result"]["should_continue"] is False
-    assert any("max_iterations_exceeded" in reason for reason in second["evaluations"][0]["run_condition"]["result"]["reasons"])
+    assert any(
+        "max_iterations_exceeded" in reason
+        for reason in second["evaluations"][0]["run_condition"]["result"]["reasons"]
+    )

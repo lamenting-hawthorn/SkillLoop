@@ -20,7 +20,11 @@ def evaluate_trace(trace: AgentTrace) -> Evaluation:
     tags: list[str] = []
     notes: list[str] = []
     all_text = "\n".join(message.content.lower() for message in trace.messages)
-    assistant_messages = [message for message in trace.messages if message.role == "assistant" and message.content.strip()]
+    assistant_messages = [
+        message
+        for message in trace.messages
+        if message.role == "assistant" and message.content.strip()
+    ]
     user_messages = [message for message in trace.messages if message.role == "user"]
 
     if assistant_messages:
@@ -38,7 +42,10 @@ def evaluate_trace(trace: AgentTrace) -> Evaluation:
         score -= 20
         tags.append("error_signal")
         notes.append("Trace contains error/failure language.")
-    if any(any(word in message.content.lower() for word in CORRECTION_WORDS) for message in user_messages):
+    if any(
+        any(word in message.content.lower() for word in CORRECTION_WORDS)
+        for message in user_messages
+    ):
         score -= 15
         tags.append("user_correction")
         notes.append("User correction/preference signal detected; candidate for learning.")

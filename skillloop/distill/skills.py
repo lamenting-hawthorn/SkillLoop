@@ -14,7 +14,9 @@ def propose_skill_updates(trace: AgentTrace) -> list[Proposal]:
             continue
         text = message.content.strip()
         lowered = text.lower()
-        if not all(signal in lowered for signal in ("when ", "then")) and not any(signal in lowered for signal in ("workflow", "procedure")):
+        if not all(signal in lowered for signal in ("when ", "then")) and not any(
+            signal in lowered for signal in ("workflow", "procedure")
+        ):
             continue
         title = "Reusable workflow candidate"
         content = f"""---

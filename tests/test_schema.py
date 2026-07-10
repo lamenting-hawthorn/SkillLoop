@@ -1,4 +1,4 @@
-from skillloop.schema import AgentMessage, AgentTrace, Proposal, ToolCall, TRACE_SCHEMA_VERSION
+from skillloop.schema import TRACE_SCHEMA_VERSION, AgentMessage, AgentTrace, Proposal, ToolCall
 
 
 def test_trace_round_trip_preserves_messages():

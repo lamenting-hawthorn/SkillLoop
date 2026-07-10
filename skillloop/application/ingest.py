@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
 from skillloop.adapters.hermes import load_hermes_export, load_hermes_state_db
 from skillloop.schema import AgentTrace

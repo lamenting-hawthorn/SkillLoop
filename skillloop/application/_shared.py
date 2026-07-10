@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from skillloop.policy import SkillLoopPolicy
 from skillloop.schema import AgentTrace, Evaluation, Proposal
 from skillloop.store import SkillLoopStore
-
-from pathlib import Path
 
 
 def load_policy(store: SkillLoopStore) -> SkillLoopPolicy:
@@ -22,7 +22,9 @@ def evaluations_by_trace(store: SkillLoopStore, traces: list[AgentTrace]) -> dic
     return store.latest_evaluations({trace.id for trace in traces})
 
 
-def proposals_by_trace(store: SkillLoopStore, traces: list[AgentTrace]) -> dict[str, list[Proposal]]:
+def proposals_by_trace(
+    store: SkillLoopStore, traces: list[AgentTrace]
+) -> dict[str, list[Proposal]]:
     wanted = {trace.id for trace in traces}
     result = {trace.id: [] for trace in traces}
     for proposal in store.list_proposals(status=None):

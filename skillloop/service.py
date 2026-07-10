@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from skillloop.fs_safety import ensure_not_symlink_escape, resolve_under_root, safe_path_segment
+from skillloop.fs_safety import ensure_not_symlink_escape, safe_path_segment
 
 SERVICE_VERSION = "1.0"
 DEFAULT_INTERVAL_SECONDS = 3600
@@ -94,7 +94,9 @@ def write_service_metadata(spec: ServiceSpec, *, kind: str, path: str | Path) ->
         ],
         "python_path": spec.python_path,
     }
-    spec.metadata_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    spec.metadata_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return spec.metadata_path
 
 
@@ -118,6 +120,10 @@ def supported_default_kind() -> str:
 # logic now lives behind the ServiceManager port in
 # skillloop.infrastructure.services.launchd; these names resolve to it so
 # existing callers (cli.py, tests) are unaffected.
+from skillloop.infrastructure.services import (  # noqa: E402
+    available_kinds,
+    get_service_manager,
+)
 from skillloop.infrastructure.services.launchd import (  # noqa: E402
     LaunchdServiceManager,
     default_launch_agents_dir,
@@ -126,30 +132,26 @@ from skillloop.infrastructure.services.launchd import (  # noqa: E402
     remove_launchd_service,
     write_launchd_service,
 )
-from skillloop.infrastructure.services import (  # noqa: E402
-    available_kinds,
-    get_service_manager,
-)
 from skillloop.ports.service_manager import ServiceManager, ServiceState  # noqa: E402
 
 __all__ = [
-    "SERVICE_VERSION",
     "DEFAULT_INTERVAL_SECONDS",
-    "ServiceSpec",
-    "ServiceManager",
-    "ServiceState",
-    "default_label",
-    "validate_launchd_label",
-    "build_service_spec",
-    "write_service_metadata",
-    "read_service_metadata",
-    "supported_default_kind",
-    "launchd_plist",
-    "default_launch_agents_dir",
-    "launchd_plist_path",
-    "write_launchd_service",
-    "remove_launchd_service",
-    "available_kinds",
-    "get_service_manager",
+    "SERVICE_VERSION",
     "LaunchdServiceManager",
+    "ServiceManager",
+    "ServiceSpec",
+    "ServiceState",
+    "available_kinds",
+    "build_service_spec",
+    "default_label",
+    "default_launch_agents_dir",
+    "get_service_manager",
+    "launchd_plist",
+    "launchd_plist_path",
+    "read_service_metadata",
+    "remove_launchd_service",
+    "supported_default_kind",
+    "validate_launchd_label",
+    "write_launchd_service",
+    "write_service_metadata",
 ]

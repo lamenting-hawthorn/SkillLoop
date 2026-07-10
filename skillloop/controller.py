@@ -6,15 +6,33 @@ from typing import Any
 
 from skillloop.adapters.generic_jsonl import load_generic_jsonl
 from skillloop.adapters.hermes import list_hermes_state_sessions, load_hermes_state_db
-from skillloop.dataset import build_manifest, parse_split_spec, split_records, write_jsonl, write_manifest
+from skillloop.dataset import (
+    build_manifest,
+    parse_split_spec,
+    split_records,
+    write_jsonl,
+    write_manifest,
+)
 from skillloop.dataset_readiness import assess_dataset_readiness
 from skillloop.export.dpo import export_dpo_records
 from skillloop.export.sft import export_sft_records
-from skillloop.fs_safety import atomic_write_json, ensure_not_symlink_escape, resolve_under_root, safe_path_segment
+from skillloop.fs_safety import (
+    atomic_write_json,
+    ensure_not_symlink_escape,
+    resolve_under_root,
+    safe_path_segment,
+)
 from skillloop.loop import LoopRunSummary, run_outer_loop
 from skillloop.policy import SkillLoopPolicy
 from skillloop.sanitize import redact_for_report
-from skillloop.schema import AgentTrace, Evaluation, Proposal, now_iso, sha256_text, stable_json_dumps
+from skillloop.schema import (
+    AgentTrace,
+    Evaluation,
+    Proposal,
+    now_iso,
+    sha256_text,
+    stable_json_dumps,
+)
 from skillloop.store import SkillLoopStore
 
 
@@ -31,7 +49,11 @@ class ControllerRunReport:
     def finish(self) -> None:
         self.finished_at = now_iso()
         if not self.id:
-            self.id = sha256_text(stable_json_dumps({"started_at": self.started_at, "actions": self.actions, "errors": self.errors}))[:16]
+            self.id = sha256_text(
+                stable_json_dumps(
+                    {"started_at": self.started_at, "actions": self.actions, "errors": self.errors}
+                )
+            )[:16]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -47,7 +69,9 @@ class ControllerRunReport:
 
 def controller_runs_dir(store: SkillLoopStore) -> Path:
     store.init()
-    return ensure_not_symlink_escape(store.state_dir / "controller_runs", store.state_dir, label="controller runs directory")
+    return ensure_not_symlink_escape(
+        store.state_dir / "controller_runs", store.state_dir, label="controller runs directory"
+    )
 
 
 def save_controller_report(store: SkillLoopStore, report: ControllerRunReport) -> Path:
@@ -55,7 +79,11 @@ def save_controller_report(store: SkillLoopStore, report: ControllerRunReport) -
     if report.finished_at is None:
         report.finish()
     report_id = safe_path_segment(report.id, label="controller report id")
-    out = ensure_not_symlink_escape(controller_runs_dir(store) / f"{report_id}.json", controller_runs_dir(store), label="controller report output")
+    out = ensure_not_symlink_escape(
+        controller_runs_dir(store) / f"{report_id}.json",
+        controller_runs_dir(store),
+        label="controller report output",
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     report.errors = [redact_for_report(err, pii=True) for err in report.errors]
     payload = report.to_dict()
@@ -68,7 +96,9 @@ def _evaluations_by_trace(store: SkillLoopStore, traces: list[AgentTrace]) -> di
     return store.latest_evaluations({trace.id for trace in traces})
 
 
-def _proposals_by_trace(store: SkillLoopStore, traces: list[AgentTrace]) -> dict[str, list[Proposal]]:
+def _proposals_by_trace(
+    store: SkillLoopStore, traces: list[AgentTrace]
+) -> dict[str, list[Proposal]]:
     wanted = {trace.id for trace in traces}
     result = {trace.id: [] for trace in traces}
     for proposal in store.list_proposals(status=None):
@@ -116,7 +146,9 @@ def ingest_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -> list[s
                 saved.append(store.save_trace(trace))
         else:
             already_seen = _ingested_hermes_session_ids(store)
-            for session_id in list_hermes_state_sessions(ingestion.hermes_db_path, limit=ingestion.max_sessions):
+            for session_id in list_hermes_state_sessions(
+                ingestion.hermes_db_path, limit=ingestion.max_sessions
+            ):
                 if session_id in already_seen:
                     continue
                 trace = load_hermes_state_db(ingestion.hermes_db_path, session_id=session_id)
@@ -128,7 +160,9 @@ def ingest_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -> list[s
     return saved
 
 
-def export_dataset_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -> dict[str, Any] | None:
+def export_dataset_from_policy(
+    store: SkillLoopStore, policy: SkillLoopPolicy
+) -> dict[str, Any] | None:
     dataset = policy.dataset
     if not (dataset.enabled or dataset.auto_update):
         return None
@@ -142,9 +176,13 @@ def export_dataset_from_policy(store: SkillLoopStore, policy: SkillLoopPolicy) -
     evaluations = _evaluations_by_trace(store, traces)
     proposals = _proposals_by_trace(store, traces)
     if dataset.kind == "sft":
-        records = export_sft_records(traces, evaluations_by_trace=evaluations, proposals_by_trace=proposals)
+        records = export_sft_records(
+            traces, evaluations_by_trace=evaluations, proposals_by_trace=proposals
+        )
     elif dataset.kind == "dpo":
-        records = export_dpo_records(traces, evaluations_by_trace=evaluations, proposals_by_trace=proposals)
+        records = export_dpo_records(
+            traces, evaluations_by_trace=evaluations, proposals_by_trace=proposals
+        )
     else:
         raise ValueError(f"unsupported dataset kind: {dataset.kind}")
 
@@ -198,7 +236,7 @@ def controller_tick(store: SkillLoopStore, policy: SkillLoopPolicy) -> Controlle
         try:
             ingested = ingest_from_policy(store, policy)
             report.actions.append({"type": "ingest", "count": len(ingested), "trace_ids": ingested})
-        except Exception as exc:  # noqa: BLE001 - controller must report and continue to safe later stages
+        except Exception as exc:
             report.errors.append(redact_for_report(f"ingest:{type(exc).__name__}:{exc}", pii=True))
 
         evaluation_policy = policy.evaluation
@@ -217,7 +255,7 @@ def controller_tick(store: SkillLoopStore, policy: SkillLoopPolicy) -> Controlle
             dataset_summary = export_dataset_from_policy(store, policy)
             if dataset_summary is not None:
                 report.actions.append({"type": "dataset_export", **dataset_summary})
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             report.errors.append(redact_for_report(f"dataset:{type(exc).__name__}:{exc}", pii=True))
 
         report.summary = {

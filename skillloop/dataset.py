@@ -6,7 +6,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from skillloop.schema import AgentTrace, Evaluation, Proposal, now_iso, sha256_text, stable_json_dumps
+from skillloop.schema import (
+    AgentTrace,
+    Evaluation,
+    Proposal,
+    now_iso,
+    sha256_text,
+    stable_json_dumps,
+)
 
 
 def estimate_tokens(text: str) -> int:
@@ -33,11 +40,15 @@ def record_stats(records: list[dict[str, Any]]) -> dict[str, Any]:
         "estimated_tokens": sum(token_counts),
         "min_estimated_tokens": min(token_counts, default=0),
         "max_estimated_tokens": max(token_counts, default=0),
-        "avg_estimated_tokens": round(sum(token_counts) / len(token_counts), 2) if token_counts else 0,
+        "avg_estimated_tokens": round(sum(token_counts) / len(token_counts), 2)
+        if token_counts
+        else 0,
     }
 
 
-def split_records(records: list[dict[str, Any]], ratios: dict[str, float] | None = None) -> dict[str, list[dict[str, Any]]]:
+def split_records(
+    records: list[dict[str, Any]], ratios: dict[str, float] | None = None
+) -> dict[str, list[dict[str, Any]]]:
     ratios = ratios or {"train": 1.0}
     if not records:
         return {name: [] for name in ratios}
@@ -84,14 +95,17 @@ def parse_split_spec(spec: str | None) -> dict[str, float]:
     return ratios
 
 
-def provenance_for_trace(trace: AgentTrace, evaluation: Evaluation | None = None, proposals: list[Proposal] | None = None) -> dict[str, Any]:
+def provenance_for_trace(
+    trace: AgentTrace, evaluation: Evaluation | None = None, proposals: list[Proposal] | None = None
+) -> dict[str, Any]:
     proposals = proposals or []
     return {
         "trace_id": trace.id,
         "trace_schema_version": trace.schema_version,
         "trace_source": trace.source,
         "raw_trace_sha256": trace.raw_trace_sha256,
-        "normalized_trace_sha256": trace.normalized_trace_sha256 or trace.compute_normalized_sha256(),
+        "normalized_trace_sha256": trace.normalized_trace_sha256
+        or trace.compute_normalized_sha256(),
         "evaluation_id": evaluation.id if evaluation else None,
         "evaluation_score": evaluation.score if evaluation else None,
         "evaluator_name": evaluation.evaluator_name if evaluation else None,
@@ -104,7 +118,11 @@ def provenance_for_trace(trace: AgentTrace, evaluation: Evaluation | None = None
 def write_jsonl(path: str | Path, records: list[dict[str, Any]]) -> Path:
     out = Path(path).resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("\n".join(json.dumps(record, ensure_ascii=False) for record in records) + ("\n" if records else ""), encoding="utf-8")
+    out.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in records)
+        + ("\n" if records else ""),
+        encoding="utf-8",
+    )
     return out
 
 
@@ -122,7 +140,15 @@ class DatasetManifest:
 
     def __post_init__(self) -> None:
         if not self.id:
-            self.id = sha256_text(stable_json_dumps({"kind": self.kind, "created_at": self.created_at, "output_files": self.output_files}))[:16]
+            self.id = sha256_text(
+                stable_json_dumps(
+                    {
+                        "kind": self.kind,
+                        "created_at": self.created_at,
+                        "output_files": self.output_files,
+                    }
+                )
+            )[:16]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -152,7 +178,9 @@ def build_manifest(
     proposals_by_trace = proposals_by_trace or {}
     all_records = [record for records in split_records_map.values() for record in records]
     stats = record_stats(all_records)
-    evaluator_counts = Counter(evaluation.evaluator_name for evaluation in evaluations_by_trace.values())
+    evaluator_counts = Counter(
+        evaluation.evaluator_name for evaluation in evaluations_by_trace.values()
+    )
     manifest = DatasetManifest(
         kind=kind,
         created_at=now_iso(),
@@ -170,14 +198,18 @@ def build_manifest(
             "trace_schema_versions": sorted({trace.schema_version for trace in source_traces}),
             "evaluation_ids": [evaluation.id for evaluation in evaluations_by_trace.values()],
             "evaluator_counts": dict(evaluator_counts),
-            "proposal_ids": [proposal.id for proposals in proposals_by_trace.values() for proposal in proposals],
+            "proposal_ids": [
+                proposal.id for proposals in proposals_by_trace.values() for proposal in proposals
+            ],
         },
     )
-    return manifest
+    return manifest  # noqa: RET504
 
 
 def write_manifest(path: str | Path, manifest: DatasetManifest) -> Path:
     out = Path(path).resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(manifest.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    out.write_text(
+        json.dumps(manifest.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return out

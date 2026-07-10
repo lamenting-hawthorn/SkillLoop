@@ -16,16 +16,24 @@ def test_diagnostics_are_read_only_for_uninitialized_project(tmp_path):
 
 def test_diagnostics_validate_initialized_database(tmp_path):
     SkillLoopStore(tmp_path).init()
-    assert next(check for check in run_diagnostics(tmp_path) if check.name == "database").status == "pass"
+    assert (
+        next(check for check in run_diagnostics(tmp_path) if check.name == "database").status
+        == "pass"
+    )
 
 
 def test_diagnostics_fail_for_missing_configured_hermes_database(tmp_path):
     store = SkillLoopStore(tmp_path)
     store.init()
     policy = SkillLoopPolicy.default()
-    policy.ingestion = IngestionPolicy(enabled=True, adapter="hermes-db", hermes_db_path=str(tmp_path / "missing.db"))
+    policy.ingestion = IngestionPolicy(
+        enabled=True, adapter="hermes-db", hermes_db_path=str(tmp_path / "missing.db")
+    )
     policy.save(store.state_dir / "policy.json")
-    assert next(check for check in run_diagnostics(tmp_path) if check.name == "hermes_database").status == "fail"
+    assert (
+        next(check for check in run_diagnostics(tmp_path) if check.name == "hermes_database").status
+        == "fail"
+    )
 
 
 def test_cli_doctor_json_is_machine_readable(tmp_path, capsys):

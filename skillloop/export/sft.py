@@ -22,7 +22,9 @@ def export_sft_records(
             for message in trace.messages
             if message.role in {"system", "user", "assistant"} and message.content.strip()
         ]
-        if any(m["role"] == "user" for m in messages) and any(m["role"] == "assistant" for m in messages):
+        if any(m["role"] == "user" for m in messages) and any(
+            m["role"] == "assistant" for m in messages
+        ):
             record: dict[str, Any] = {"messages": messages}
             if include_metadata:
                 record["metadata"] = provenance_for_trace(

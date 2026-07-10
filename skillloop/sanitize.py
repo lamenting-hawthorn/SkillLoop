@@ -12,7 +12,9 @@ PII_REDACTION = "[REDACTED_PII]"
 _ENV_MAX_FIELD_CHARS = int(os.environ.get("SKILLLOOP_MAX_FIELD_CHARS", "65536"))
 ENV_REDACT_PII = os.environ.get("SKILLLOOP_REDACT_PII", "0").lower() in {"1", "true", "yes", "on"}
 ENV_MAX_TRACE_CHARS = int(os.environ.get("SKILLLOOP_MAX_TRACE_CHARS", "5_000_000".replace("_", "")))
-ENV_MAX_MESSAGE_CHARS = int(os.environ.get("SKILLLOOP_MAX_MESSAGE_CHARS", "200_000".replace("_", "")))
+ENV_MAX_MESSAGE_CHARS = int(
+    os.environ.get("SKILLLOOP_MAX_MESSAGE_CHARS", "200_000".replace("_", ""))
+)
 
 MAX_FIELD_CHARS = _ENV_MAX_FIELD_CHARS
 MAX_TRACE_CHARS = ENV_MAX_TRACE_CHARS
@@ -83,7 +85,7 @@ def redact_pii(text: str) -> str:
     redacted = _EMAIL_PATTERN.sub(PII_REDACTION, text)
     redacted = _PHONE_PATTERN.sub(PII_REDACTION, redacted)
     redacted = _IPV4_PATTERN.sub(PII_REDACTION, redacted)
-    return redacted
+    return redacted  # noqa: RET504
 
 
 def redact_artifact_ref(ref: str) -> str:
@@ -91,7 +93,9 @@ def redact_artifact_ref(ref: str) -> str:
     normalized = text.replace("\\", "/")
     if text == REDACTION or text != str(ref):
         return ARTIFACT_REF_REDACTION
-    if _ABSOLUTE_PATH_PATTERN.match(text) and any(marker in normalized.lower() for marker in _SENSITIVE_PATH_MARKERS):
+    if _ABSOLUTE_PATH_PATTERN.match(text) and any(
+        marker in normalized.lower() for marker in _SENSITIVE_PATH_MARKERS
+    ):
         return ARTIFACT_REF_REDACTION
     return text
 
@@ -131,19 +135,19 @@ def redact_for_report(text: str, *, pii: bool | None = None, limit: int = MAX_ER
 
 
 __all__ = [
-    "REDACTION",
     "ARTIFACT_REF_REDACTION",
-    "PII_REDACTION",
     "MAX_FIELD_CHARS",
-    "MAX_TRACE_CHARS",
     "MAX_MESSAGE_CHARS",
-    "validate_field_size",
-    "validate_trace_size",
-    "validate_message_size",
-    "redact_secrets",
-    "redact_pii",
+    "MAX_TRACE_CHARS",
+    "PII_REDACTION",
+    "REDACTION",
     "redact_artifact_ref",
     "redact_artifact_refs",
     "redact_data",
     "redact_for_report",
+    "redact_pii",
+    "redact_secrets",
+    "validate_field_size",
+    "validate_message_size",
+    "validate_trace_size",
 ]

@@ -22,8 +22,8 @@ def get_service_manager(kind: str) -> ServiceManager:
 
 __all__ = [
     "LaunchdServiceManager",
-    "SystemdServiceManager",
     "ServiceManager",
+    "SystemdServiceManager",
     "available_kinds",
     "get_service_manager",
 ]

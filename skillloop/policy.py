@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from skillloop.conditions import LoopCondition
-from skillloop.errors import InputError, PolicyError
-from skillloop.sanitize import MAX_FIELD_CHARS, validate_field_size
+from skillloop.errors import PolicyError
+from skillloop.sanitize import validate_field_size
 
 POLICY_VERSION = "1.0"
 
@@ -28,7 +28,7 @@ class IngestionPolicy:
     max_sessions: int = 20
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> "IngestionPolicy":
+    def from_dict(cls, data: dict[str, Any] | None) -> IngestionPolicy:
         data = dict(data or {})
         adapter = str(data.get("adapter") or "none")
         if adapter not in SUPPORTED_INGESTION_ADAPTERS:
@@ -90,7 +90,7 @@ class EvaluationPolicy:
             )
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> "EvaluationPolicy":
+    def from_dict(cls, data: dict[str, Any] | None) -> EvaluationPolicy:
         data = dict(data or {})
         min_score = int(data.get("min_score", 70))
         if not 0 <= min_score <= 100:
@@ -135,7 +135,7 @@ class DatasetPolicy:
     splits: str = "train=0.8,validation=0.1,test=0.1"
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> "DatasetPolicy":
+    def from_dict(cls, data: dict[str, Any] | None) -> DatasetPolicy:
         data = dict(data or {})
         enabled = bool(data.get("enabled", False))
         kind = str(data.get("kind") or "sft")
@@ -181,7 +181,7 @@ class TrainingPolicy:
     max_cost_usd: float | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> "TrainingPolicy":
+    def from_dict(cls, data: dict[str, Any] | None) -> TrainingPolicy:
         data = dict(data or {})
         max_cost = data.get("max_cost_usd")
         if max_cost is not None:
@@ -226,15 +226,17 @@ class SkillLoopPolicy:
     training: TrainingPolicy = field(default_factory=TrainingPolicy)
 
     @classmethod
-    def default(cls) -> "SkillLoopPolicy":
+    def default(cls) -> SkillLoopPolicy:
         return cls()
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "SkillLoopPolicy":
+    def from_dict(cls, data: dict[str, Any]) -> SkillLoopPolicy:
         data = dict(data or {})
         version = str(data.get("version") or POLICY_VERSION)
         if version != POLICY_VERSION:
-            raise PolicyError(f"unsupported policy version: {version!r} (expected {POLICY_VERSION})")
+            raise PolicyError(
+                f"unsupported policy version: {version!r} (expected {POLICY_VERSION})"
+            )
         mode = str(data.get("mode") or "autonomous_review_first")
         if mode not in SUPPORTED_MODES:
             raise PolicyError(
@@ -251,7 +253,7 @@ class SkillLoopPolicy:
         )
 
     @classmethod
-    def load(cls, path: str | Path) -> "SkillLoopPolicy":
+    def load(cls, path: str | Path) -> SkillLoopPolicy:
         try:
             raw = Path(path).read_text(encoding="utf-8")
         except OSError as exc:

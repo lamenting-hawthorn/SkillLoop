@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -31,12 +31,12 @@ def parse_iso(value: str | None) -> datetime | None:
         return None
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass
@@ -99,15 +99,15 @@ class LoopSchedule:
         self.next_run_at = self.next_run_at or self.compute_next_run(utc_now()).isoformat()
 
     def compute_next_run(self, base: datetime) -> datetime:
-        return (base.astimezone(timezone.utc) + _INTERVALS[self.interval]).replace(microsecond=0)
+        return (base.astimezone(UTC) + _INTERVALS[self.interval]).replace(microsecond=0)
 
     def due(self, at: datetime | None = None) -> bool:
         at = at or utc_now()
         next_run = parse_iso(self.next_run_at)
-        return next_run is None or at.astimezone(timezone.utc) >= next_run
+        return next_run is None or at.astimezone(UTC) >= next_run
 
     def mark_run(self, at: datetime | None = None) -> None:
-        at = (at or utc_now()).astimezone(timezone.utc).replace(microsecond=0)
+        at = (at or utc_now()).astimezone(UTC).replace(microsecond=0)
         self.last_run_at = at.isoformat()
         self.next_run_at = self.compute_next_run(at).isoformat()
         self.updated_at = now_iso()
@@ -129,13 +129,15 @@ class LoopSchedule:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "LoopSchedule":
+    def from_dict(cls, data: dict[str, Any]) -> LoopSchedule:
         return cls(
             version=str(data.get("version") or SCHEDULE_VERSION),
             interval=str(data.get("interval") or "daily"),
             evaluator=str(data.get("evaluator") or "rubric"),
             min_score=int(data.get("min_score") or 70),
-            condition=LoopCondition.from_dict(data.get("condition") or {"score_gte": int(data.get("min_score") or 70)}),
+            condition=LoopCondition.from_dict(
+                data.get("condition") or {"score_gte": int(data.get("min_score") or 70)}
+            ),
             only_unevaluated=bool(data.get("only_unevaluated", True)),
             distill_failures=bool(data.get("distill_failures", True)),
             limit=data.get("limit"),
@@ -153,7 +155,9 @@ def schedule_path(store: SkillLoopStore) -> Path:
 def save_schedule(store: SkillLoopStore, schedule: LoopSchedule) -> Path:
     store.init()
     path = schedule_path(store)
-    path.write_text(json.dumps(schedule.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(schedule.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return path
 
 
@@ -164,7 +168,9 @@ def load_schedule(store: SkillLoopStore) -> LoopSchedule:
     return LoopSchedule.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
 
-def proposals_with_provenance(trace_id: str, proposals: list[Proposal], source_evaluation: Evaluation | None) -> list[Proposal]:
+def proposals_with_provenance(
+    trace_id: str, proposals: list[Proposal], source_evaluation: Evaluation | None
+) -> list[Proposal]:
     annotated: list[Proposal] = []
     for proposal in proposals:
         if proposal.kind == "memory":
@@ -224,7 +230,9 @@ def run_outer_loop(
             summary.stopped_traces.append(trace.id)
             continue
         if distill_failures:
-            proposals = proposals_with_provenance(trace.id, propose_memory_updates(trace) + propose_skill_updates(trace), evaluation)
+            proposals = proposals_with_provenance(
+                trace.id, propose_memory_updates(trace) + propose_skill_updates(trace), evaluation
+            )
             for proposal in proposals:
                 saved_id = store.save_proposal(proposal)
                 if saved_id == proposal.id:
@@ -235,7 +243,9 @@ def run_outer_loop(
     return summary
 
 
-def tick(store: SkillLoopStore, *, force: bool = False) -> tuple[bool, LoopRunSummary | None, LoopSchedule]:
+def tick(
+    store: SkillLoopStore, *, force: bool = False
+) -> tuple[bool, LoopRunSummary | None, LoopSchedule]:
     schedule = load_schedule(store)
     if not force and not schedule.due():
         return False, None, schedule

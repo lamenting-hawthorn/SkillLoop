@@ -30,7 +30,9 @@ def cmd_traces_list(args: argparse.Namespace) -> int:
         print("No traces found.")
         return 0
     for trace in traces:
-        print(f"{trace.id[:12]}\t{trace.source}\t{trace.created_at}\t{len(trace.messages)} messages")
+        print(
+            f"{trace.id[:12]}\t{trace.source}\t{trace.created_at}\t{len(trace.messages)} messages"
+        )
     return 0
 
 

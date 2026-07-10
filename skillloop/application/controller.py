@@ -37,7 +37,11 @@ class ControllerService:
             max_sessions=req.max_sessions,
         )
         policy.dataset = DatasetPolicy(
-            enabled=req.auto_export, auto_update=req.auto_export, kind="sft", out=req.dataset_out, min_score=req.min_score
+            enabled=req.auto_export,
+            auto_update=req.auto_export,
+            kind="sft",
+            out=req.dataset_out,
+            min_score=req.min_score,
         )
         policy.evaluation.min_score = req.min_score
         policy.evaluation.condition = LoopCondition(score_gte=req.min_score)

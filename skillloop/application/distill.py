@@ -47,4 +47,4 @@ class DistillService:
         return DistillResult(entries=entries, created=created, duplicates=duplicates)
 
 
-__all__ = ["DistillService", "DistillResult"]
+__all__ = ["DistillResult", "DistillService"]

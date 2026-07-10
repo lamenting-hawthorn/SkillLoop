@@ -51,4 +51,4 @@ def cmd_apply(args: argparse.Namespace) -> int:
     return 0
 
 
-__all__ = ["cmd_review_list", "cmd_review_approve", "cmd_review_reject", "cmd_apply"]
+__all__ = ["cmd_apply", "cmd_review_approve", "cmd_review_list", "cmd_review_reject"]

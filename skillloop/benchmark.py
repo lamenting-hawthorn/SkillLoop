@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +38,15 @@ class BenchmarkReport:
 
     def __post_init__(self) -> None:
         if not self.id:
-            self.id = sha256_text(stable_json_dumps({"baseline": self.baseline, "candidates": self.candidates, "created_at": self.created_at}))[:16]
+            self.id = sha256_text(
+                stable_json_dumps(
+                    {
+                        "baseline": self.baseline,
+                        "candidates": self.candidates,
+                        "created_at": self.created_at,
+                    }
+                )
+            )[:16]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,12 +71,12 @@ def replay_benchmark(
 ) -> BenchmarkReport:
     candidates = candidates or ["rubric"]
     cases: list[ReplayCaseResult] = []
-    improved_counts = {candidate: 0 for candidate in candidates}
-    regressed_counts = {candidate: 0 for candidate in candidates}
-    unchanged_counts = {candidate: 0 for candidate in candidates}
-    evidence_improved_counts = {candidate: 0 for candidate in candidates}
-    stricter_failure_detection_counts = {candidate: 0 for candidate in candidates}
-    total_delta = {candidate: 0 for candidate in candidates}
+    improved_counts = dict.fromkeys(candidates, 0)
+    regressed_counts = dict.fromkeys(candidates, 0)
+    unchanged_counts = dict.fromkeys(candidates, 0)
+    evidence_improved_counts = dict.fromkeys(candidates, 0)
+    stricter_failure_detection_counts = dict.fromkeys(candidates, 0)
+    total_delta = dict.fromkeys(candidates, 0)
 
     for trace in traces:
         baseline_eval = _run_evaluator(registry, trace, baseline)
@@ -113,23 +121,35 @@ def replay_benchmark(
         "unchanged_counts": unchanged_counts,
         "evidence_improved_counts": evidence_improved_counts,
         "stricter_failure_detection_counts": stricter_failure_detection_counts,
-        "average_delta": {candidate: round(total_delta[candidate] / len(traces), 2) if traces else 0 for candidate in candidates},
+        "average_delta": {
+            candidate: round(total_delta[candidate] / len(traces), 2) if traces else 0
+            for candidate in candidates
+        },
         "quality_improved_counts": {
-            candidate: improved_counts[candidate] + evidence_improved_counts[candidate] + stricter_failure_detection_counts[candidate]
+            candidate: improved_counts[candidate]
+            + evidence_improved_counts[candidate]
+            + stricter_failure_detection_counts[candidate]
             for candidate in candidates
         },
         "training_ready_signal": all(
-            improved_counts[candidate] + evidence_improved_counts[candidate] + stricter_failure_detection_counts[candidate] > 0
+            improved_counts[candidate]
+            + evidence_improved_counts[candidate]
+            + stricter_failure_detection_counts[candidate]
+            > 0
             for candidate in candidates
         )
         if traces
         else False,
     }
-    return BenchmarkReport(baseline=baseline, candidates=candidates, created_at=now_iso(), cases=cases, summary=summary)
+    return BenchmarkReport(
+        baseline=baseline, candidates=candidates, created_at=now_iso(), cases=cases, summary=summary
+    )
 
 
 def write_benchmark_report(path: str | Path, report: BenchmarkReport) -> Path:
     out = Path(path).resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    out.write_text(
+        json.dumps(report.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return out

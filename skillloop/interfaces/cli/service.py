@@ -6,6 +6,7 @@ import json
 from skillloop.application.requests import ServiceInstallRequest
 from skillloop.application.service import ServiceService
 from skillloop.interfaces.cli._shared import _service_interval_seconds, _store
+from skillloop.service import get_service_manager, supported_default_kind
 
 
 def cmd_service_install(args: argparse.Namespace) -> int:
@@ -17,13 +18,10 @@ def cmd_service_install(args: argparse.Namespace) -> int:
         launch_agents_dir=args.launch_agents_dir,
     )
     path, spec = ServiceService(store).install(req)
-    print(f"Wrote launchd service plist to {path}")
-    print(f"label: {spec.label}")
-    print(f"interval_seconds: {spec.interval_seconds}")
-    print("To start it now, run:")
-    print(f"launchctl bootstrap gui/$(id -u) {path}")
-    print("To stop it later, run:")
-    print(f"launchctl bootout gui/$(id -u) {path}")
+    kind = args.kind or supported_default_kind()
+    manager = get_service_manager(kind)
+    for line in manager.install_message(spec, path):
+        print(line)
     return 0
 
 
@@ -36,16 +34,9 @@ def cmd_service_status(args: argparse.Namespace) -> int:
     if not metadata:
         print("SkillLoop service: not installed")
         return 0
-    from pathlib import Path
-
-    path = Path(str(metadata.get("path", ""))).expanduser()
-    print("SkillLoop service: installed")
-    print(f"kind: {metadata.get('kind')}")
-    print(f"label: {metadata.get('label')}")
-    print(f"path: {path}")
-    print(f"plist_exists: {path.exists()}")
-    print(f"interval_seconds: {metadata.get('interval_seconds')}")
-    print(f"command: {' '.join(str(part) for part in metadata.get('command', []))}")
+    manager = get_service_manager(metadata["kind"])
+    for line in manager.status_message(metadata):
+        print(line)
     return 0
 
 

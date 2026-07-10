@@ -13,12 +13,22 @@ def test_replay_benchmark_compares_evaluator_versions():
             AgentMessage(
                 role="assistant",
                 content="Done. Tests passed.",
-                tool_calls=[ToolCall(name="terminal", arguments={"command": "pytest"}, result="passed", success=True, exit_code=0)],
+                tool_calls=[
+                    ToolCall(
+                        name="terminal",
+                        arguments={"command": "pytest"},
+                        result="passed",
+                        success=True,
+                        exit_code=0,
+                    )
+                ],
             ),
         ],
     )
 
-    report = replay_benchmark([trace], default_evaluator_registry(), baseline="rubric_legacy", candidates=["rubric"])
+    report = replay_benchmark(
+        [trace], default_evaluator_registry(), baseline="rubric_legacy", candidates=["rubric"]
+    )
     data = report.to_dict()
 
     assert data["summary"]["traces"] == 1
@@ -26,7 +36,10 @@ def test_replay_benchmark_compares_evaluator_versions():
     assert data["candidates"] == ["rubric"]
     assert data["cases"][0]["scores"]["rubric"] >= 0
     assert "rubric" in data["cases"][0]["deltas"]
-    assert data["cases"][0]["evidence_counts"]["rubric"] > data["cases"][0]["evidence_counts"]["rubric_legacy"]
+    assert (
+        data["cases"][0]["evidence_counts"]["rubric"]
+        > data["cases"][0]["evidence_counts"]["rubric_legacy"]
+    )
     assert data["summary"]["evidence_improved_counts"]["rubric"] == 1
     assert data["summary"]["quality_improved_counts"]["rubric"] >= 1
     assert data["summary"]["training_ready_signal"] is True

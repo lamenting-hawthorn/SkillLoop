@@ -48,7 +48,9 @@ def _hashes_complete(traces: list[AgentTrace], evaluations_by_trace: dict[str, E
         if not (trace.normalized_trace_sha256 or trace.compute_normalized_sha256()):
             return False
         evaluation = evaluations_by_trace.get(trace.id)
-        if evaluation is None or not (evaluation.artifact_sha256 or evaluation.compute_artifact_sha256()):
+        if evaluation is None or not (
+            evaluation.artifact_sha256 or evaluation.compute_artifact_sha256()
+        ):
             return False
     return True
 
@@ -79,7 +81,8 @@ def assess_dataset_readiness(
         "min_estimated_tokens": estimated_tokens >= policy.min_estimated_tokens,
         "non_empty_splits": not policy.require_non_empty_splits or not empty_splits,
         "metadata": not policy.require_metadata or _metadata_complete(records),
-        "hashes": not policy.require_hashes or _hashes_complete(source_traces, evaluations_by_trace),
+        "hashes": not policy.require_hashes
+        or _hashes_complete(source_traces, evaluations_by_trace),
     }
     warnings: list[str] = []
     if empty_splits:
@@ -92,7 +95,9 @@ def assess_dataset_readiness(
         stats={
             "records": len(records),
             "estimated_tokens": estimated_tokens,
-            "split_records": {name: len(split_records) for name, split_records in split_records_map.items()},
+            "split_records": {
+                name: len(split_records) for name, split_records in split_records_map.items()
+            },
             "min_records": policy.min_records,
             "min_estimated_tokens": policy.min_estimated_tokens,
         },

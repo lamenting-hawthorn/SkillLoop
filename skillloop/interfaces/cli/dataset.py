@@ -17,7 +17,9 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     if args.trace_id:
         traces = [_resolve_trace(store, args.trace_id)]
     candidates = [item.strip() for item in args.candidates.split(",") if item.strip()]
-    req = BenchmarkRequest(baseline=args.baseline, candidates=candidates, trace_id=args.trace_id, out=args.out)
+    req = BenchmarkRequest(
+        baseline=args.baseline, candidates=candidates, trace_id=args.trace_id, out=args.out
+    )
     report, out_path = BenchmarkService(store).run(traces, req)
     if out_path:
         print(f"Wrote benchmark report to {out_path}")

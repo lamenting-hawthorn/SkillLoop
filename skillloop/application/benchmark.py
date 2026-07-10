@@ -13,7 +13,9 @@ class BenchmarkService:
         self._store = store
 
     def run(self, traces: list[AgentTrace], req: BenchmarkRequest) -> tuple[object, str | None]:
-        report = replay_benchmark(traces, default_evaluator_registry(), baseline=req.baseline, candidates=req.candidates)
+        report = replay_benchmark(
+            traces, default_evaluator_registry(), baseline=req.baseline, candidates=req.candidates
+        )
         out_path = None
         if req.out:
             out_path = write_benchmark_report(req.out, report)

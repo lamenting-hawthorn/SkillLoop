@@ -11,7 +11,12 @@ def test_cli_ingest_eval_distill_export_flow(tmp_path, capsys):
     trace_path.write_text(
         "\n".join(
             [
-                json.dumps({"role": "user", "content": "Remember that I prefer concise answers in terminal."}),
+                json.dumps(
+                    {
+                        "role": "user",
+                        "content": "Remember that I prefer concise answers in terminal.",
+                    }
+                ),
                 json.dumps({"role": "assistant", "content": "Done. Verified with tests."}),
             ]
         )
@@ -25,6 +30,7 @@ def test_cli_ingest_eval_distill_export_flow(tmp_path, capsys):
     assert main(["--path", str(tmp_path), "review", "list"]) == 0
 
     from skillloop.store import SkillLoopStore
+
     proposals = SkillLoopStore(tmp_path).list_proposals(status=None)
     assert proposals
     assert proposals[0].source_evaluation_id
@@ -33,7 +39,12 @@ def test_cli_ingest_eval_distill_export_flow(tmp_path, capsys):
     assert proposals[0].producer_provenance["kind"] == "distiller"
 
     out_path = tmp_path / "data" / "sft.jsonl"
-    assert main(["--path", str(tmp_path), "export", "sft", "--out", str(out_path), "--min-score", "70"]) == 0
+    assert (
+        main(
+            ["--path", str(tmp_path), "export", "sft", "--out", str(out_path), "--min-score", "70"]
+        )
+        == 0
+    )
 
     lines = out_path.read_text().splitlines()
     assert len(lines) == 1
@@ -63,7 +74,12 @@ def test_cli_export_min_score_skips_low_quality_trace(tmp_path):
     assert main(["--path", str(tmp_path), "ingest", "generic", str(trace_path)]) == 0
     assert main(["--path", str(tmp_path), "eval", "latest"]) == 0
     out_path = tmp_path / "data" / "sft.jsonl"
-    assert main(["--path", str(tmp_path), "export", "sft", "--out", str(out_path), "--min-score", "70"]) == 0
+    assert (
+        main(
+            ["--path", str(tmp_path), "export", "sft", "--out", str(out_path), "--min-score", "70"]
+        )
+        == 0
+    )
 
     assert out_path.read_text() == ""
 
@@ -71,15 +87,26 @@ def test_cli_export_min_score_skips_low_quality_trace(tmp_path):
 def test_cli_ingests_hermes_state_db_latest(tmp_path, capsys):
     db = tmp_path / "state.db"
     conn = sqlite3.connect(db)
-    conn.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, title TEXT, started_at REAL, ended_at REAL, message_count INTEGER)")
-    conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, timestamp REAL, active INTEGER)")
+    conn.execute(
+        "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, title TEXT, started_at REAL, ended_at REAL, message_count INTEGER)"
+    )
+    conn.execute(
+        "CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, timestamp REAL, active INTEGER)"
+    )
     conn.execute("INSERT INTO sessions VALUES ('s1', 'cli', 'Session', 1.0, NULL, 2)")
-    conn.execute("INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'user', 'hello', NULL, 1.1, 1)")
-    conn.execute("INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'assistant', 'hi', NULL, 1.2, 1)")
+    conn.execute(
+        "INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'user', 'hello', NULL, 1.1, 1)"
+    )
+    conn.execute(
+        "INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'assistant', 'hi', NULL, 1.2, 1)"
+    )
     conn.commit()
     conn.close()
 
-    assert main(["--path", str(tmp_path), "ingest", "hermes-db", "--db-path", str(db), "--latest"]) == 0
+    assert (
+        main(["--path", str(tmp_path), "ingest", "hermes-db", "--db-path", str(db), "--latest"])
+        == 0
+    )
     assert main(["--path", str(tmp_path), "traces", "list"]) == 0
 
     output = capsys.readouterr().out
@@ -89,15 +116,38 @@ def test_cli_ingests_hermes_state_db_latest(tmp_path, capsys):
 def test_cli_setup_status_and_controller_history(tmp_path, capsys):
     db = tmp_path / "state.db"
     conn = sqlite3.connect(db)
-    conn.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, title TEXT, started_at REAL, ended_at REAL, message_count INTEGER)")
-    conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, timestamp REAL, active INTEGER)")
+    conn.execute(
+        "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, title TEXT, started_at REAL, ended_at REAL, message_count INTEGER)"
+    )
+    conn.execute(
+        "CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, timestamp REAL, active INTEGER)"
+    )
     conn.execute("INSERT INTO sessions VALUES ('s1', 'cli', 'Session', 1.0, NULL, 2)")
-    conn.execute("INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'user', 'Remember concise status.', NULL, 1.1, 1)")
-    conn.execute("INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'assistant', 'Done. Verified with tests.', NULL, 1.2, 1)")
+    conn.execute(
+        "INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'user', 'Remember concise status.', NULL, 1.1, 1)"
+    )
+    conn.execute(
+        "INSERT INTO messages (session_id, role, content, tool_calls, timestamp, active) VALUES ('s1', 'assistant', 'Done. Verified with tests.', NULL, 1.2, 1)"
+    )
     conn.commit()
     conn.close()
 
-    assert main(["--path", str(tmp_path), "setup", "--connect", "hermes", "--db-path", str(db), "--start", "--auto-export"]) == 0
+    assert (
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "setup",
+                "--connect",
+                "hermes",
+                "--db-path",
+                str(db),
+                "--start",
+                "--auto-export",
+            ]
+        )
+        == 0
+    )
     assert (tmp_path / ".skillloop" / "policy.json").exists()
     assert main(["--path", str(tmp_path), "status"]) == 0
     assert main(["--path", str(tmp_path), "controller", "history"]) == 0
@@ -113,15 +163,43 @@ def test_cli_setup_status_and_controller_history(tmp_path, capsys):
 def test_cli_setup_rejects_invalid_bounds(tmp_path):
     db = tmp_path / "state.db"
     conn = sqlite3.connect(db)
-    conn.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, title TEXT, started_at REAL, ended_at REAL, message_count INTEGER)")
-    conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, timestamp REAL, active INTEGER)")
+    conn.execute(
+        "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, title TEXT, started_at REAL, ended_at REAL, message_count INTEGER)"
+    )
+    conn.execute(
+        "CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, timestamp REAL, active INTEGER)"
+    )
     conn.commit()
     conn.close()
 
     with pytest.raises(SystemExit, match="--max-sessions must be positive"):
-        main(["--path", str(tmp_path), "setup", "--connect", "hermes", "--db-path", str(db), "--max-sessions", "0"])
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "setup",
+                "--connect",
+                "hermes",
+                "--db-path",
+                str(db),
+                "--max-sessions",
+                "0",
+            ]
+        )
     with pytest.raises(SystemExit, match="--min-score must be between 0 and 100"):
-        main(["--path", str(tmp_path), "setup", "--connect", "hermes", "--db-path", str(db), "--min-score", "101"])
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "setup",
+                "--connect",
+                "hermes",
+                "--db-path",
+                str(db),
+                "--min-score",
+                "101",
+            ]
+        )
 
 
 def test_cli_status_handles_corrupt_dataset_manifest(tmp_path, capsys):
@@ -156,13 +234,25 @@ def test_cli_export_writes_split_files_and_manifest(tmp_path):
 
     out_path = tmp_path / "data" / "sft.jsonl"
     manifest_path = tmp_path / "data" / "manifest.json"
-    assert main([
-        "--path", str(tmp_path), "export", "sft",
-        "--out", str(out_path),
-        "--manifest-out", str(manifest_path),
-        "--splits", "train=0.5,validation=0.25,test=0.25",
-        "--min-score", "70",
-    ]) == 0
+    assert (
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "export",
+                "sft",
+                "--out",
+                str(out_path),
+                "--manifest-out",
+                str(manifest_path),
+                "--splits",
+                "train=0.5,validation=0.25,test=0.25",
+                "--min-score",
+                "70",
+            ]
+        )
+        == 0
+    )
 
     manifest = json.loads(manifest_path.read_text())
     assert set(manifest["splits"]) == {"train", "validation", "test"}
@@ -198,16 +288,38 @@ def test_cli_training_config_generates_files_without_running_training(tmp_path):
     train = tmp_path / "sft.train.jsonl"
     train.write_text('{"messages":[]}\n')
     manifest = tmp_path / "manifest.json"
-    manifest.write_text(json.dumps({"id": "m1", "kind": "sft", "records": 1, "estimated_tokens": 4, "output_files": {"train": str(train)}}))
+    manifest.write_text(
+        json.dumps(
+            {
+                "id": "m1",
+                "kind": "sft",
+                "records": 1,
+                "estimated_tokens": 4,
+                "output_files": {"train": str(train)},
+            }
+        )
+    )
     config_dir = tmp_path / "configs"
 
-    assert main([
-        "--path", str(tmp_path), "training-config", "trl",
-        "--dataset-manifest", str(manifest),
-        "--base-model", "NousResearch/Test",
-        "--output-dir", str(tmp_path / "out"),
-        "--config-dir", str(config_dir),
-    ]) == 0
+    assert (
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "training-config",
+                "trl",
+                "--dataset-manifest",
+                str(manifest),
+                "--base-model",
+                "NousResearch/Test",
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--config-dir",
+                str(config_dir),
+            ]
+        )
+        == 0
+    )
 
     payload = json.loads((config_dir / "trl_sft_config.json").read_text())
     assert payload["safety"]["training_auto_run"] is False

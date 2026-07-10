@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from skillloop.dataset import build_manifest, parse_split_spec, split_records, write_jsonl, write_manifest
+from skillloop.dataset import (
+    build_manifest,
+    parse_split_spec,
+    split_records,
+    write_jsonl,
+    write_manifest,
+)
 from skillloop.export.dpo import export_dpo_records
 from skillloop.export.okf import export_okf_bundle
 from skillloop.export.sft import export_sft_records
@@ -42,7 +48,13 @@ class ExportService:
 
         if req.format == "okf":
             bundle_path = export_okf_bundle(self._store, Path(req.out))
-            return ExportResult(format=req.format, records=0, output_files={}, manifest_path=None, okf_bundle=bundle_path)
+            return ExportResult(
+                format=req.format,
+                records=0,
+                output_files={},
+                manifest_path=None,
+                okf_bundle=bundle_path,
+            )
 
         if req.format == "sft":
             records = export_sft_records(
@@ -79,7 +91,11 @@ class ExportService:
             proposals_by_trace=proposals_by_trace_map,
             export_metadata={"min_score": req.min_score, "split_spec": req.splits or "train=1.0"},
         )
-        manifest_path = Path(req.manifest_out).resolve() if req.manifest_out else out.with_suffix(out.suffix + ".manifest.json")
+        manifest_path = (
+            Path(req.manifest_out).resolve()
+            if req.manifest_out
+            else out.with_suffix(out.suffix + ".manifest.json")
+        )
         write_manifest(manifest_path, manifest)
         return ExportResult(
             format=req.format,
@@ -89,4 +105,4 @@ class ExportService:
         )
 
 
-__all__ = ["ExportService", "ExportResult"]
+__all__ = ["ExportResult", "ExportService"]

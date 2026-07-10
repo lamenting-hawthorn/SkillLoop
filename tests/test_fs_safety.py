@@ -4,7 +4,6 @@ import stat
 
 import pytest
 
-from skillloop.errors import PersistenceError
 from skillloop.fs_safety import (
     atomic_write_json,
     atomic_write_text,

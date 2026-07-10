@@ -41,4 +41,4 @@ def cmd_controller_show(args: argparse.Namespace) -> int:
     return 0
 
 
-__all__ = ["cmd_controller_run", "cmd_controller_history", "cmd_controller_show"]
+__all__ = ["cmd_controller_history", "cmd_controller_run", "cmd_controller_show"]

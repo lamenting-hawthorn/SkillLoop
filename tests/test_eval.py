@@ -5,7 +5,10 @@ from skillloop.schema import AgentMessage, AgentTrace, ToolCall
 def test_evaluation_rewards_completed_answer():
     trace = AgentTrace(
         source="test",
-        messages=[AgentMessage(role="user", content="do x"), AgentMessage(role="assistant", content="Done. Verified with tests.")],
+        messages=[
+            AgentMessage(role="user", content="do x"),
+            AgentMessage(role="assistant", content="Done. Verified with tests."),
+        ],
     )
 
     evaluation = evaluate_trace(trace)
@@ -41,7 +44,14 @@ def test_evaluation_penalizes_failed_tools_even_when_assistant_claims_done():
             AgentMessage(
                 role="assistant",
                 content="Done, tests passed.",
-                tool_calls=[ToolCall(name="terminal", arguments={"command": "pytest"}, result="FAILED", success=False)],
+                tool_calls=[
+                    ToolCall(
+                        name="terminal",
+                        arguments={"command": "pytest"},
+                        result="FAILED",
+                        success=False,
+                    )
+                ],
             ),
         ],
     )
@@ -95,7 +105,9 @@ def test_evaluation_records_file_artifact_and_user_feedback_evidence():
     trace = AgentTrace(
         source="test",
         messages=[
-            AgentMessage(role="user", content="No, that's wrong. Remember I prefer concise answers."),
+            AgentMessage(
+                role="user", content="No, that's wrong. Remember I prefer concise answers."
+            ),
             AgentMessage(
                 role="assistant",
                 content="Updated file.",
@@ -107,5 +119,11 @@ def test_evaluation_records_file_artifact_and_user_feedback_evidence():
     evaluation = evaluate_trace(trace)
 
     assert any(item["kind"] == "file_artifact" for item in evaluation.evidence)
-    assert any(item["kind"] == "user_feedback" and item["subtype"] == "correction" for item in evaluation.evidence)
-    assert any(item["kind"] == "user_feedback" and item["subtype"] == "learning_signal" for item in evaluation.evidence)
+    assert any(
+        item["kind"] == "user_feedback" and item["subtype"] == "correction"
+        for item in evaluation.evidence
+    )
+    assert any(
+        item["kind"] == "user_feedback" and item["subtype"] == "learning_signal"
+        for item in evaluation.evidence
+    )

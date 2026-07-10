@@ -46,3 +46,21 @@ class ServiceManager(ABC):
     @abstractmethod
     def uninstall(self, spec: Any, *, launch_agents_dir: str | Path | None = None) -> list[Path]:
         """Remove the definition file and recorded metadata. Returns removed paths."""
+
+    @abstractmethod
+    def install_message(self, spec: Any, path: str | Path) -> list[str]:
+        """Return user-facing lines describing the just-written service definition
+        file and how to activate/deactivate it.
+
+        All OS-specific wording (launchctl/systemctl commands, plist/unit
+        terminology) lives here so the CLI layer stays platform-agnostic and
+        merely renders the returned lines.
+        """
+
+    @abstractmethod
+    def status_message(self, metadata: dict[str, Any]) -> list[str]:
+        """Return user-facing lines describing recorded installation metadata.
+
+        OS-specific wording (plist/unit file existence terminology) lives here
+        so the CLI layer renders it without knowing the platform.
+        """

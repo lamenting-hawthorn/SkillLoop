@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
 
 from skillloop.fs_safety import (
     ensure_not_symlink_escape,
@@ -12,11 +12,8 @@ from skillloop.fs_safety import (
     safe_path_segment,
     sha256_bytes,
 )
-from skillloop.infrastructure.sqlite.migrations import SCHEMA_VERSION
 from skillloop.infrastructure.sqlite.repository import SQLiteRepository
-from skillloop.schema import AgentTrace, Evaluation, Proposal, SCHEMA_VERSION as SCHEMA_VERSION_CONST
-
-SCHEMA_VERSION = SCHEMA_VERSION_CONST
+from skillloop.schema import AgentTrace, Evaluation, Proposal
 
 
 class SkillLoopStore:
@@ -42,7 +39,7 @@ class SkillLoopStore:
         self._repo.init()
 
     @contextmanager
-    def transaction(self) -> Iterator["SkillLoopStore"]:
+    def transaction(self) -> Iterator[SkillLoopStore]:
         """Explicit transaction boundary spanning controller ticks and batch writes.
 
         All persistence calls made while inside the context reuse one connection, so
@@ -83,7 +80,9 @@ class SkillLoopStore:
         ensure_not_symlink_escape(self.raw_trace_dir, self.state_dir, label="raw trace directory")
         suffix = raw_path.suffix or ".raw"
         preserved = ensure_not_symlink_escape(
-            self.raw_trace_dir / f"{trace_id}{suffix}", self.raw_trace_dir, label="preserved raw trace"
+            self.raw_trace_dir / f"{trace_id}{suffix}",
+            self.raw_trace_dir,
+            label="preserved raw trace",
         )
         if raw_path.resolve() != preserved.resolve():
             shutil.copyfile(raw_path, preserved)
@@ -94,7 +93,9 @@ class SkillLoopStore:
         if not trace_obj.raw_artifact_ref:
             raise FileNotFoundError(f"trace has no preserved raw artifact: {trace_obj.id}")
         ensure_not_symlink_escape(self.raw_trace_dir, self.state_dir, label="raw trace directory")
-        raw_path = resolve_under_root(self.root, trace_obj.raw_artifact_ref, label="preserved raw trace")
+        raw_path = resolve_under_root(
+            self.root, trace_obj.raw_artifact_ref, label="preserved raw trace"
+        )
         try:
             raw_path.relative_to(self.raw_trace_dir.resolve())
         except ValueError as exc:
@@ -157,7 +158,9 @@ class SkillLoopStore:
     def find_duplicate_proposal(self, proposal: Proposal) -> Proposal | None:
         active_statuses = {"pending", "approved", "applied"}
         self.init()
-        payload = self._repo.find_duplicate_proposal_payload(proposal, active_statuses, self._active_conn)
+        payload = self._repo.find_duplicate_proposal_payload(
+            proposal, active_statuses, self._active_conn
+        )
         return Proposal.from_dict(json.loads(payload)) if payload is not None else None
 
     def save_proposal(self, proposal: Proposal) -> str:
@@ -200,7 +203,10 @@ class SkillLoopStore:
 
     def list_controller_runs(self, limit: int | None = None, offset: int = 0) -> list[dict]:
         self.init()
-        return [json.loads(p) for p in self._repo.list_controller_run_payloads(limit, offset, self._active_conn)]
+        return [
+            json.loads(p)
+            for p in self._repo.list_controller_run_payloads(limit, offset, self._active_conn)
+        ]
 
     def get_controller_run(self, run_id: str) -> dict:
         self.init()

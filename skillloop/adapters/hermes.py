@@ -24,7 +24,9 @@ def normalize_hermes_export(data: dict[str, Any]) -> AgentTrace:
             tool_calls.append(
                 ToolCall(
                     name=str(call.get("name") or call.get("function", {}).get("name") or "unknown"),
-                    arguments=dict(call.get("arguments") or call.get("function", {}).get("arguments") or {}),
+                    arguments=dict(
+                        call.get("arguments") or call.get("function", {}).get("arguments") or {}
+                    ),
                     result=call.get("result"),
                     success=call.get("success"),
                     id=str(call.get("id") or call.get("tool_call_id") or ""),
@@ -42,7 +44,11 @@ def normalize_hermes_export(data: dict[str, Any]) -> AgentTrace:
                 role=role,
                 content=redact_secrets(str(item.get("content") or item.get("text") or "")),
                 tool_calls=tool_calls,
-                metadata={k: v for k, v in item.items() if k not in {"role", "content", "text", "tool_calls"}},
+                metadata={
+                    k: v
+                    for k, v in item.items()
+                    if k not in {"role", "content", "text", "tool_calls"}
+                },
             )
         )
     return AgentTrace(
@@ -50,7 +56,10 @@ def normalize_hermes_export(data: dict[str, Any]) -> AgentTrace:
         messages=messages,
         adapter={"name": ADAPTER_NAME, "version": ADAPTER_VERSION},
         runtime={"name": str(data.get("runtime") or data.get("provider") or "hermes")},
-        metadata={"session_id": data.get("session_id") or data.get("id"), "raw_keys": sorted(data.keys())},
+        metadata={
+            "session_id": data.get("session_id") or data.get("id"),
+            "raw_keys": sorted(data.keys()),
+        },
         raw_trace_sha256=sha256_text(stable_json_dumps(data)),
     )
 
@@ -137,7 +146,9 @@ def _latest_session_id(conn: sqlite3.Connection) -> str:
     return str(row[0])
 
 
-def load_hermes_state_db(db_path: str | Path, session_id: str | None = None, latest: bool = False) -> AgentTrace:
+def load_hermes_state_db(
+    db_path: str | Path, session_id: str | None = None, latest: bool = False
+) -> AgentTrace:
     """Load a Hermes session from `state.db` without mutating the database.
 
     The connection uses SQLite read-only URI mode. Callers must pass either an

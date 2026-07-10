@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from skillloop.eval.evidence import command_execution_evidence, file_artifact_evidence, test_execution_evidence, user_feedback_evidence
+from skillloop.eval.evidence import (
+    command_execution_evidence,
+    file_artifact_evidence,
+    test_execution_evidence,
+    user_feedback_evidence,
+)
 from skillloop.schema import AgentTrace, Evaluation, ToolCall
 
 EVALUATOR_NAME = "rubric"
@@ -65,14 +70,23 @@ def evaluate_trace(trace: AgentTrace) -> Evaluation:
 
     successful_tools = [call for call in calls if call.success is True or call.status == "success"]
     failed_tools = [call for call in calls if call.success is False or call.status == "error"]
-    unknown_tools = [call for call in calls if call not in successful_tools and call not in failed_tools]
+    unknown_tools = [
+        call for call in calls if call not in successful_tools and call not in failed_tools
+    ]
 
     if successful_tools:
         tags.append("tool_success")
         delta = min(20, 8 + 4 * len(successful_tools))
         score += delta
         notes.append(f"Trace has {len(successful_tools)} successful tool call(s).")
-        evidence.append(_evidence("tool_success", count=len(successful_tools), delta=delta, tool_call_ids=[call.id for call in successful_tools]))
+        evidence.append(
+            _evidence(
+                "tool_success",
+                count=len(successful_tools),
+                delta=delta,
+                tool_call_ids=[call.id for call in successful_tools],
+            )
+        )
 
     if failed_tools:
         tags.append("tool_failure")
@@ -93,7 +107,13 @@ def evaluate_trace(trace: AgentTrace) -> Evaluation:
     if unknown_tools:
         tags.append("tool_success_unknown")
         notes.append(f"Trace has {len(unknown_tools)} tool call(s) without success metadata.")
-        evidence.append(_evidence("tool_success_unknown", count=len(unknown_tools), tool_call_ids=[call.id for call in unknown_tools]))
+        evidence.append(
+            _evidence(
+                "tool_success_unknown",
+                count=len(unknown_tools),
+                tool_call_ids=[call.id for call in unknown_tools],
+            )
+        )
 
     structured_evidence = (
         command_execution_evidence(calls)

@@ -17,7 +17,14 @@ def callable_source_hash(func: Callable[..., Any]) -> str:
     return sha256_text(source)
 
 
-def component_provenance(*, kind: str, name: str, version: str, func: Callable[..., Any] | None = None, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+def component_provenance(
+    *,
+    kind: str,
+    name: str,
+    version: str,
+    func: Callable[..., Any] | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "provenance_version": PROVENANCE_VERSION,
         "kind": kind,
@@ -47,7 +54,9 @@ def annotate_proposal_provenance(
 ) -> Proposal:
     if source_evaluation is not None:
         proposal.source_evaluation_id = source_evaluation.id
-        proposal.source_evaluation_sha256 = source_evaluation.artifact_sha256 or source_evaluation.compute_artifact_sha256()
+        proposal.source_evaluation_sha256 = (
+            source_evaluation.artifact_sha256 or source_evaluation.compute_artifact_sha256()
+        )
         proposal.source_evaluation_provenance = dict(source_evaluation.component_provenance or {})
     proposal.producer_provenance = component_provenance(
         kind="distiller",

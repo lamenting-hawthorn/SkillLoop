@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent Architecture + SkillLoop Memory Diagrams</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --ink: #18202a;
+      --muted: #657383;
+      --line: #d7dde5;
+      --blue: #1f6feb;
+      --green: #1f8f5f;
+      --amber: #b7791f;
+      --red: #c2410c;
+      --violet: #7c3aed;
+      --slate: #334155;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+
+    header {
+      margin-bottom: 28px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 18px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin: 18px 0;
+      overflow: hidden;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--slate);
+      background: #fbfcfe;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--slate);
+    }
+
+    .dot.blue { background: var(--blue); }
+    .dot.green { background: var(--green); }
+    .dot.amber { background: var(--amber); }
+    .dot.violet { background: var(--violet); }
+    .dot.red { background: var(--red); }
+
+    .flow {
+      display: grid;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .flow.cols-5 {
+      grid-template-columns: repeat(5, minmax(145px, 1fr));
+    }
+
+    .flow.cols-4 {
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+    }
+
+    .flow.cols-3 {
+      grid-template-columns: repeat(3, minmax(190px, 1fr));
+    }
+
+    .node {
+      position: relative;
+      min-height: 104px;
+      padding: 14px 14px 13px;
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--slate);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .node.blue { border-left-color: var(--blue); }
+    .node.green { border-left-color: var(--green); }
+    .node.amber { border-left-color: var(--amber); }
+    .node.violet { border-left-color: var(--violet); }
+    .node.red { border-left-color: var(--red); }
+
+    .node small {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-weight: 700;
+      min-height: 28px;
+    }
+
+    .lane-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .lane {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      background: #fbfcfe;
+    }
+
+    .lane-title {
+      margin-bottom: 12px;
+      color: var(--slate);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mini {
+      min-height: auto;
+      padding: 11px 12px;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .note {
+      border-left: 4px solid var(--amber);
+      background: #fff8ed;
+      padding: 13px 14px;
+      border-radius: 6px;
+      color: #5c3b0a;
+    }
+
+    .note strong {
+      color: #432900;
+    }
+
+    .matrix {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+    }
+
+    .matrix th,
+    .matrix td {
+      padding: 11px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    .matrix th {
+      background: #eef2f7;
+      color: var(--slate);
+      font-size: 13px;
+    }
+
+    .matrix tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      color: #243447;
+    }
+
+    @media (max-width: 980px) {
+      .flow.cols-5,
+      .flow.cols-4,
+      .flow.cols-3,
+      .lane-grid,
+      .split {
+        grid-template-columns: 1fr;
+      }
+
+      .arrow {
+        transform: rotate(90deg);
+        min-height: 20px;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Agent Architecture + SkillLoop Memory System</h1>
+      <p>How live invocation, memory storage, observation, and governed skill learning fit together.</p>
+      <div class="legend" aria-label="Legend">
+        <span class="tag"><span class="dot blue"></span>Invocation</span>
+        <span class="tag"><span class="dot green"></span>Memory</span>
+        <span class="tag"><span class="dot amber"></span>Observation</span>
+        <span class="tag"><span class="dot violet"></span>Governance</span>
+        <span class="tag"><span class="dot red"></span>Risk / Gate</span>
+      </div>
+    </header>
+
+    <section class="section">
+      <h2>1. Agent Architecture: Live Runtime Invocation</h2>
+      <div class="flow cols-5">
+        <div class="node blue">
+          <h3>Incoming Message</h3>
+          <p>User sends text through CLI, WhatsApp, Telegram, or API.</p>
+          <small>Adapter normalizes the channel payload.</small>
+        </div>
+        <div class="node blue">
+          <h3>Resolve Actor</h3>
+          <p>Map sender to actor_id, org_id, role, and session_id.</p>
+          <small>Production gate: no demo identity fallback.</small>
+        </div>
+        <div class="node amber">
+          <h3>Store Event</h3>
+          <p>Append raw event to event_store.events.</p>
+          <small>Observation before memory.</small>
+        </div>
+        <div class="node blue">
+          <h3>Invoke LangGraph</h3>
+          <p>Run the workflow with thread_id checkpointing.</p>
+          <small>graph.invoke(state, config)</small>
+        </div>
+        <div class="node green">
+          <h3>Answer + Writeback</h3>
+          <p>Retrieve memory, call model, decide salience, write durable memory.</p>
+          <small>Current graph is linear MVP.</small>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>2. Agent Architecture: LangGraph Workflow</h2>
+      <div class="flow cols-5">
+        <div class="node blue">
+          <h3>resolve_identity</h3>
+          <p>Attach actor and trace_id to the run.</p>
+        </div>
+        <div class="node green">
+          <h3>retrieve_memory</h3>
+          <p>Search Hermes native memory first, then Postgres hybrid retrieval, then graph expansion.</p>
+        </div>
+        <div class="node blue">
+          <h3>call_model</h3>
+          <p>Construct prompt with retrieved context and call LLM.</p>
+        </div>
+        <div class="node violet">
+          <h3>salience_gate</h3>
+          <p>Decide whether the new turn deserves durable memory.</p>
+        </div>
+        <div class="node green">
+          <h3>write_memory</h3>
+          <p>Write semantic memory to Postgres and create graph links.</p>
+        </div>
+      </div>
+      <div class="note" style="margin-top: 16px;">
+        <strong>Important:</strong> this is where production hardening matters most. Request-path DB access must use scoped identity, graph expansion must be permission-filtered, and writes must redact sensitive data before storage.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>3. Agent Architecture: Memory Storage + Retrieval</h2>
+      <div class="split">
+        <div class="lane">
+          <div class="lane-title">Canonical Memory Store</div>
+          <div class="stack">
+            <div class="node green mini">
+              <h3>Semantic Memory</h3>
+              <p>Stable facts, preferences, corrections, business context.</p>
+            </div>
+            <div class="node green mini">
+              <h3>Episodic Memory</h3>
+              <p>Past interactions, sessions, events, conversation history.</p>
+            </div>
+            <div class="node green mini">
+              <h3>Procedural Memory</h3>
+              <p>Skills, playbooks, reusable workflows, tool procedures.</p>
+            </div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-title">Retrieval Engine</div>
+          <div class="stack">
+            <div class="node blue mini">
+              <h3>FTS Search</h3>
+              <p>Keyword/exact-match recall.</p>
+            </div>
+            <div class="node blue mini">
+              <h3>Vector Search</h3>
+              <p>Semantic similarity through embeddings.</p>
+            </div>
+            <div class="node blue mini">
+              <h3>Graph Expansion</h3>
+              <p>Related entities and linked memories after permission filtering.</p>
+            </div>
+            <div class="node amber mini">
+              <h3>Retrieval Logs</h3>
+              <p>Query, results, latency, trace_id, context_used.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>4. SkillLoop: Post-Run Learning + Governance</h2>
+      <div class="flow cols-5">
+        <div class="node amber">
+          <h3>AgentTrace</h3>
+          <p>Completed run: messages, tool calls, runtime metadata, hashes.</p>
+        </div>
+        <div class="node violet">
+          <h3>Evaluation</h3>
+          <p>Deterministic scoring using tool success, errors, tests, user feedback.</p>
+        </div>
+        <div class="node violet">
+          <h3>Distillation</h3>
+          <p>Create memory and skill proposals from the evaluated trace.</p>
+        </div>
+        <div class="node red">
+          <h3>Review Gate</h3>
+          <p>Human approves or rejects proposed learning artifacts.</p>
+        </div>
+        <div class="node green">
+          <h3>Apply / Export</h3>
+          <p>Approved memory/skill files, SFT/DPO datasets, training configs.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>5. SkillLoop Observational Layer</h2>
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Artifact</th>
+            <th>What It Observes</th>
+            <th>Why It Matters</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="code">AgentTrace</td>
+            <td>Messages, runtime source, adapter metadata, raw and normalized hashes.</td>
+            <td>Reconstructs what happened before storing durable memory.</td>
+          </tr>
+          <tr>
+            <td class="code">ToolCall</td>
+            <td>Tool name, args, result, status, duration, errors, artifact refs.</td>
+            <td>Separates verified tool evidence from assistant claims.</td>
+          </tr>
+          <tr>
+            <td class="code">Evaluation</td>
+            <td>Score, tags, notes, evidence, evaluator version.</td>
+            <td>Prevents low-quality traces from becoming trusted learning.</td>
+          </tr>
+          <tr>
+            <td class="code">Proposal provenance</td>
+            <td>Source trace, source evaluation, producer version, code hash.</td>
+            <td>Makes every memory/skill candidate auditable.</td>
+          </tr>
+          <tr>
+            <td class="code">Controller run reports</td>
+            <td>Ingest/eval/distill/export actions and errors per tick.</td>
+            <td>Provides operational history for the governance loop.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>6. Combined Target System</h2>
+      <div class="lane-grid">
+        <div class="lane">
+          <div class="lane-title">Live Runtime</div>
+          <div class="stack">
+            <div class="node blue mini"><h3>Invoke Agent</h3><p>Gateway or adapter calls LangGraph.</p></div>
+            <div class="node green mini"><h3>Retrieve Memory</h3><p>Semantic + episodic + procedural context.</p></div>
+            <div class="node blue mini"><h3>Use Skill</h3><p>Rank procedural memory / skill and execute workflow.</p></div>
+            <div class="node amber mini"><h3>Trace Everything</h3><p>Events, retrievals, model calls, tool calls, errors.</p></div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-title">Learning Governor</div>
+          <div class="stack">
+            <div class="node violet mini"><h3>Evaluate Trace</h3><p>Score quality and evidence.</p></div>
+            <div class="node violet mini"><h3>Propose Updates</h3><p>Memory candidate or reusable skill candidate.</p></div>
+            <div class="node red mini"><h3>Approval Policy</h3><p>Human review for sensitive or low-confidence updates.</p></div>
+            <div class="node green mini"><h3>Promote Durable Artifact</h3><p>Write typed memory, procedural skill, or dataset record.</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="note" style="margin-top: 16px;">
+        <strong>The missing bridge:</strong> SkillLoop currently learns skills after the run. Agent Architecture retrieves memory during the run. The world-class version connects them so procedural skills are retrieved and invoked live, then improved by SkillLoop after execution.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>7. What “Skill Use” Should Become</h2>
+      <div class="flow cols-4">
+        <div class="node green">
+          <h3>Procedural Store</h3>
+          <p>Approved workflows live as typed procedural memory or SKILL.md files.</p>
+        </div>
+        <div class="node blue">
+          <h3>Skill Retrieval</h3>
+          <p>Task intent retrieves relevant workflows before model execution.</p>
+        </div>
+        <div class="node blue">
+          <h3>Skill-Guided Run</h3>
+          <p>LangGraph uses the selected skill as an execution plan/checklist.</p>
+        </div>
+        <div class="node violet">
+          <h3>SkillLoop Review</h3>
+          <p>Trace outcome improves, supersedes, or rejects the skill.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

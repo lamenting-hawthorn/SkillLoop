@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Callable, List
+from collections.abc import Callable
 
-from skillloop.schema import Proposal, SCHEMA_VERSION
+from skillloop.schema import SCHEMA_VERSION, Proposal
 
 MigrationFn = Callable[[sqlite3.Connection], None]
 
@@ -83,15 +83,13 @@ def _upgrade_proposals_to_v2(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_proposals_status_created ON proposals(status, created_at DESC)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_proposals_content_hash ON proposals(content_hash)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_proposals_content_hash ON proposals(content_hash)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_controller_runs_started ON controller_runs(started_at DESC)"
     )
 
 
-MIGRATIONS: List[Migration] = [
+MIGRATIONS: list[Migration] = [
     Migration(version=1, name="create_initial_tables", apply=_create_initial_tables),
     Migration(version=2, name="proposals_content_hash_and_indexes", apply=_upgrade_proposals_to_v2),
 ]

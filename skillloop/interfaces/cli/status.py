@@ -16,7 +16,11 @@ def cmd_status(args: argparse.Namespace) -> int:
     pending = store.list_proposals(status="pending")
     runs = store.list_controller_runs(limit=1)
     policy = _load_policy(store)
-    dataset_manifest = (store.root / policy.dataset.out).resolve().with_suffix(Path(policy.dataset.out).suffix + ".manifest.json")
+    dataset_manifest = (
+        (store.root / policy.dataset.out)
+        .resolve()
+        .with_suffix(Path(policy.dataset.out).suffix + ".manifest.json")
+    )
     dataset_stats = None
     if dataset_manifest.exists():
         try:
@@ -54,7 +58,9 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(_format_count("pending proposals", len(pending)))
         if dataset_stats:
             if dataset_stats.get("error"):
-                print(f"dataset: error={dataset_stats['error']} manifest={dataset_stats['manifest']}")
+                print(
+                    f"dataset: error={dataset_stats['error']} manifest={dataset_stats['manifest']}"
+                )
             else:
                 print(
                     f"dataset: records={dataset_stats['records']} "
@@ -65,7 +71,9 @@ def cmd_status(args: argparse.Namespace) -> int:
         if runs:
             run = runs[0]
             summary = run.get("summary", {})
-            print(f"last controller run: {run.get('id')} finished={run.get('finished_at')} errors={summary.get('errors')}")
+            print(
+                f"last controller run: {run.get('id')} finished={run.get('finished_at')} errors={summary.get('errors')}"
+            )
         else:
             print("last controller run: none")
     return 0

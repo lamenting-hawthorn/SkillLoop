@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
 
 from skillloop.infrastructure.sqlite.migrations import SCHEMA_VERSION, apply_migrations
 from skillloop.schema import AgentTrace, Evaluation, Proposal
@@ -42,9 +42,8 @@ class SQLiteRepository:
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
         """Explicit transaction boundary. Commits on success, rolls back on error."""
-        with self.connect() as conn:
-            with conn:
-                yield conn
+        with self.connect() as conn, conn:
+            yield conn
 
     def init(self) -> None:
         if self._initialized:
@@ -70,7 +69,9 @@ class SQLiteRepository:
         )
         return trace.id
 
-    def save_traces(self, traces: list[AgentTrace], conn: sqlite3.Connection | None = None) -> list[str]:
+    def save_traces(
+        self, traces: list[AgentTrace], conn: sqlite3.Connection | None = None
+    ) -> list[str]:
         records = [
             (t.id, t.source, t.created_at, json.dumps(t.to_dict(), ensure_ascii=False))
             for t in traces
@@ -88,7 +89,9 @@ class SQLiteRepository:
             )
         return [t.id for t in traces]
 
-    def get_trace_payload(self, trace_id: str, conn: sqlite3.Connection | None = None) -> str | None:
+    def get_trace_payload(
+        self, trace_id: str, conn: sqlite3.Connection | None = None
+    ) -> str | None:
         if conn is None:
             with self.connect() as c:
                 row = c.execute("SELECT payload FROM traces WHERE id = ?", (trace_id,)).fetchone()
@@ -130,8 +133,8 @@ class SQLiteRepository:
         saved = 0
         batch: list[AgentTrace] = []
         with jsonl_path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
+            for raw_line in fh:
+                line = raw_line.strip()
                 if not line:
                     continue
                 batch.append(AgentTrace.from_dict(json.loads(line)))
@@ -144,7 +147,9 @@ class SQLiteRepository:
             saved += len(batch)
         return saved
 
-    def save_evaluation(self, evaluation: Evaluation, conn: sqlite3.Connection | None = None) -> str:
+    def save_evaluation(
+        self, evaluation: Evaluation, conn: sqlite3.Connection | None = None
+    ) -> str:
         payload = json.dumps(evaluation.to_dict(), ensure_ascii=False)
         self._exec(
             conn,
@@ -196,7 +201,9 @@ class SQLiteRepository:
             rows = conn.execute(query, args).fetchall()
         return [row[0] for row in rows]
 
-    def latest_evaluation_payload(self, trace_id: str, conn: sqlite3.Connection | None = None) -> str | None:
+    def latest_evaluation_payload(
+        self, trace_id: str, conn: sqlite3.Connection | None = None
+    ) -> str | None:
         if conn is None:
             with self.connect() as c:
                 row = c.execute(
@@ -326,7 +333,9 @@ class SQLiteRepository:
             rows = conn.execute(query, args).fetchall()
         return [row[0] for row in rows]
 
-    def get_proposal_payload(self, proposal_id: str, conn: sqlite3.Connection | None = None) -> str | None:
+    def get_proposal_payload(
+        self, proposal_id: str, conn: sqlite3.Connection | None = None
+    ) -> str | None:
         if conn is None:
             with self.connect() as c:
                 row = c.execute(
@@ -363,7 +372,9 @@ class SQLiteRepository:
             rows = conn.execute(query, args).fetchall()
         return [row[0] for row in rows]
 
-    def get_controller_run_payload(self, run_id: str, conn: sqlite3.Connection | None = None) -> str | None:
+    def get_controller_run_payload(
+        self, run_id: str, conn: sqlite3.Connection | None = None
+    ) -> str | None:
         if conn is None:
             with self.connect() as c:
                 row = c.execute(

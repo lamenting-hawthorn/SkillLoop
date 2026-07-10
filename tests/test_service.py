@@ -1,20 +1,19 @@
 import json
 import plistlib
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from skillloop.cli import main
+from skillloop.infrastructure.services import get_service_manager
+from skillloop.infrastructure.services.systemd import SystemdServiceManager, systemd_unit
+from skillloop.ports.service_manager import ServiceState
 from skillloop.service import (
     build_service_spec,
     launchd_plist,
     read_service_metadata,
     remove_launchd_service,
 )
-from skillloop.infrastructure.services import get_service_manager
-from skillloop.infrastructure.services.systemd import SystemdServiceManager, systemd_unit
-from skillloop.ports.service_manager import ServiceState
 
 
 def test_launchd_plist_runs_controller_tick(tmp_path):
@@ -48,14 +47,25 @@ def test_launchd_plist_runs_controller_tick(tmp_path):
 def test_service_install_status_and_uninstall_cli(tmp_path, capsys):
     launch_agents = tmp_path / "LaunchAgents"
 
-    assert main([
-        "--path", str(tmp_path),
-        "service", "install",
-        "--kind", "launchd",
-        "--label", "com.skillloop.test",
-        "--interval-seconds", "300",
-        "--launch-agents-dir", str(launch_agents),
-    ]) == 0
+    assert (
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "service",
+                "install",
+                "--kind",
+                "launchd",
+                "--label",
+                "com.skillloop.test",
+                "--interval-seconds",
+                "300",
+                "--launch-agents-dir",
+                str(launch_agents),
+            ]
+        )
+        == 0
+    )
 
     plist_path = launch_agents / "com.skillloop.test.plist"
     assert plist_path.exists()
@@ -77,11 +87,19 @@ def test_service_install_status_and_uninstall_cli(tmp_path, capsys):
     assert "SkillLoop service: installed" in output
     assert '"label": "com.skillloop.test"' in output
 
-    assert main([
-        "--path", str(tmp_path),
-        "service", "uninstall",
-        "--launch-agents-dir", str(launch_agents),
-    ]) == 0
+    assert (
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "service",
+                "uninstall",
+                "--launch-agents-dir",
+                str(launch_agents),
+            ]
+        )
+        == 0
+    )
 
     assert not plist_path.exists()
     assert not (tmp_path / ".skillloop" / "service.json").exists()
@@ -89,23 +107,39 @@ def test_service_install_status_and_uninstall_cli(tmp_path, capsys):
 
 def test_service_install_rejects_invalid_interval(tmp_path):
     with pytest.raises(SystemExit, match="--interval-seconds must be positive"):
-        main([
-            "--path", str(tmp_path),
-            "service", "install",
-            "--kind", "launchd",
-            "--interval-seconds", "0",
-        ])
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "service",
+                "install",
+                "--kind",
+                "launchd",
+                "--interval-seconds",
+                "0",
+            ]
+        )
 
 
 def test_service_uninstall_ignores_tampered_metadata_path(tmp_path):
     launch_agents = tmp_path / "LaunchAgents"
-    assert main([
-        "--path", str(tmp_path),
-        "service", "install",
-        "--kind", "launchd",
-        "--label", "com.skillloop.test",
-        "--launch-agents-dir", str(launch_agents),
-    ]) == 0
+    assert (
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "service",
+                "install",
+                "--kind",
+                "launchd",
+                "--label",
+                "com.skillloop.test",
+                "--launch-agents-dir",
+                str(launch_agents),
+            ]
+        )
+        == 0
+    )
     plist_path = launch_agents / "com.skillloop.test.plist"
     outside = tmp_path.parent / f"{tmp_path.name}-outside.plist"
     outside.write_text("do not delete")
@@ -114,7 +148,9 @@ def test_service_uninstall_ignores_tampered_metadata_path(tmp_path):
     metadata["path"] = str(outside)
     metadata_path.write_text(json.dumps(metadata))
 
-    removed = remove_launchd_service(state_dir=tmp_path / ".skillloop", launch_agents_dir=launch_agents)
+    removed = remove_launchd_service(
+        state_dir=tmp_path / ".skillloop", launch_agents_dir=launch_agents
+    )
 
     assert not plist_path.exists()
     assert outside.exists()
@@ -127,16 +163,25 @@ def test_service_install_rejects_symlinked_state_dir_escape(tmp_path):
     outside.mkdir()
     state_dir = tmp_path / ".skillloop"
     state_dir.symlink_to(outside, target_is_directory=True)
-    spec = build_service_spec(project_root=tmp_path, state_dir=state_dir, label="com.skillloop.test")
+    spec = build_service_spec(
+        project_root=tmp_path, state_dir=state_dir, label="com.skillloop.test"
+    )
 
     with pytest.raises(ValueError, match="state directory"):
-        main([
-            "--path", str(tmp_path),
-            "service", "install",
-            "--kind", "launchd",
-            "--label", spec.label,
-            "--launch-agents-dir", str(tmp_path / "LaunchAgents"),
-        ])
+        main(
+            [
+                "--path",
+                str(tmp_path),
+                "service",
+                "install",
+                "--kind",
+                "launchd",
+                "--label",
+                spec.label,
+                "--launch-agents-dir",
+                str(tmp_path / "LaunchAgents"),
+            ]
+        )
 
 
 def test_service_uninstall_rejects_symlinked_state_dir_escape(tmp_path):

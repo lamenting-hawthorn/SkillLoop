@@ -42,9 +42,17 @@ class LoopCondition:
         if self.max_iterations is not None and int(self.max_iterations) < 1:
             raise ValueError("max_iterations must be >= 1")
         object.__setattr__(self, "score_gte", int(self.score_gte))
-        object.__setattr__(self, "required_tags", tuple(str(tag) for tag in self.required_tags if str(tag)))
-        object.__setattr__(self, "forbidden_tags", tuple(str(tag) for tag in self.forbidden_tags if str(tag)))
-        object.__setattr__(self, "max_iterations", int(self.max_iterations) if self.max_iterations is not None else None)
+        object.__setattr__(
+            self, "required_tags", tuple(str(tag) for tag in self.required_tags if str(tag))
+        )
+        object.__setattr__(
+            self, "forbidden_tags", tuple(str(tag) for tag in self.forbidden_tags if str(tag))
+        )
+        object.__setattr__(
+            self,
+            "max_iterations",
+            int(self.max_iterations) if self.max_iterations is not None else None,
+        )
 
     def evaluate(self, evaluation: Evaluation, *, prior_iterations: int = 0) -> LoopConditionResult:
         reasons: list[str] = []
@@ -87,7 +95,7 @@ class LoopCondition:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> "LoopCondition":
+    def from_dict(cls, data: dict[str, Any] | None) -> LoopCondition:
         data = dict(data or {})
         return cls(
             version=str(data.get("version") or CONDITION_VERSION),
@@ -98,7 +106,7 @@ class LoopCondition:
         )
 
     @classmethod
-    def from_json(cls, text: str | None) -> "LoopCondition":
+    def from_json(cls, text: str | None) -> LoopCondition:
         if not text:
             return cls()
         return cls.from_dict(json.loads(text))

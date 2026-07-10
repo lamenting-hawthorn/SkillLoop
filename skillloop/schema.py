@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -17,7 +17,7 @@ PROPOSAL_STATUSES = {"pending", "approved", "applied", "rejected"}
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def stable_json_dumps(data: Any) -> str:
@@ -96,7 +96,7 @@ class ToolCall:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ToolCall":
+    def from_dict(cls, data: dict[str, Any]) -> ToolCall:
         return cls(
             id=str(data.get("id") or uuid4().hex),
             name=str(data.get("name", "")),
@@ -137,7 +137,7 @@ class AgentMessage:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AgentMessage":
+    def from_dict(cls, data: dict[str, Any]) -> AgentMessage:
         return cls(
             role=str(data.get("role", "user")),
             content=str(data.get("content") or ""),
@@ -171,9 +171,15 @@ class AgentTrace:
         self.metadata = redact_data(dict(self.metadata or {}))
         self.runtime = redact_data(dict(self.runtime or {}))
         self.adapter = redact_data(dict(self.adapter or {}))
-        self.raw_artifact_ref = str(self.raw_artifact_ref) if self.raw_artifact_ref is not None else None
-        self.raw_trace_sha256 = str(self.raw_trace_sha256) if self.raw_trace_sha256 is not None else None
-        self.normalized_trace_sha256 = str(self.normalized_trace_sha256) if self.normalized_trace_sha256 is not None else None
+        self.raw_artifact_ref = (
+            str(self.raw_artifact_ref) if self.raw_artifact_ref is not None else None
+        )
+        self.raw_trace_sha256 = (
+            str(self.raw_trace_sha256) if self.raw_trace_sha256 is not None else None
+        )
+        self.normalized_trace_sha256 = (
+            str(self.normalized_trace_sha256) if self.normalized_trace_sha256 is not None else None
+        )
 
     def _dict_for_hash(self) -> dict[str, Any]:
         data = self.to_dict(include_hashes=False)
@@ -198,11 +204,13 @@ class AgentTrace:
         }
         if include_hashes:
             data["raw_trace_sha256"] = self.raw_trace_sha256
-            data["normalized_trace_sha256"] = self.normalized_trace_sha256 or self.compute_normalized_sha256()
+            data["normalized_trace_sha256"] = (
+                self.normalized_trace_sha256 or self.compute_normalized_sha256()
+            )
         return data
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AgentTrace":
+    def from_dict(cls, data: dict[str, Any]) -> AgentTrace:
         return cls(
             id=str(data.get("id") or uuid4().hex),
             schema_version=str(data.get("schema_version") or "1.0"),
@@ -242,10 +250,14 @@ class Evaluation:
         self.evaluator_name = str(self.evaluator_name or "unknown")
         self.evaluator_version = str(self.evaluator_version or "0")
         self.evidence = [redact_data(dict(item or {})) for item in self.evidence]
-        self.created_from_trace_schema_version = str(self.created_from_trace_schema_version or "1.0")
+        self.created_from_trace_schema_version = str(
+            self.created_from_trace_schema_version or "1.0"
+        )
         self.run_condition = dict(self.run_condition or {})
         self.component_provenance = dict(self.component_provenance or {})
-        self.artifact_sha256 = str(self.artifact_sha256) if self.artifact_sha256 is not None else None
+        self.artifact_sha256 = (
+            str(self.artifact_sha256) if self.artifact_sha256 is not None else None
+        )
 
     def _dict_for_hash(self) -> dict[str, Any]:
         data = self.to_dict(include_hash=False)
@@ -275,7 +287,7 @@ class Evaluation:
         return data
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Evaluation":
+    def from_dict(cls, data: dict[str, Any]) -> Evaluation:
         return cls(
             id=str(data.get("id") or uuid4().hex),
             trace_id=str(data.get("trace_id") or ""),
@@ -286,7 +298,9 @@ class Evaluation:
             evaluator_name=str(data.get("evaluator_name") or "rubric"),
             evaluator_version=str(data.get("evaluator_version") or "1.0"),
             evidence=[dict(item or {}) for item in data.get("evidence", [])],
-            created_from_trace_schema_version=str(data.get("created_from_trace_schema_version") or "1.0"),
+            created_from_trace_schema_version=str(
+                data.get("created_from_trace_schema_version") or "1.0"
+            ),
             run_condition=dict(data.get("run_condition") or {}),
             component_provenance=dict(data.get("component_provenance") or {}),
             artifact_sha256=data.get("artifact_sha256"),
@@ -313,14 +327,23 @@ class Proposal:
 
     def __post_init__(self) -> None:
         self.content = str(self.content or "")
-        self.content_hash = str(self.content_hash or sha256_text(stable_json_dumps({"kind": self.kind, "content": self.content})))
+        self.content_hash = str(
+            self.content_hash
+            or sha256_text(stable_json_dumps({"kind": self.kind, "content": self.content}))
+        )
         self.status = str(self.status or "pending")
         if self.status not in PROPOSAL_STATUSES:
             self.status = "pending"
         self.applied_at = str(self.applied_at) if self.applied_at is not None else None
         self.source_trace_schema_version = str(self.source_trace_schema_version or "1.0")
-        self.source_evaluation_id = str(self.source_evaluation_id) if self.source_evaluation_id is not None else None
-        self.source_evaluation_sha256 = str(self.source_evaluation_sha256) if self.source_evaluation_sha256 is not None else None
+        self.source_evaluation_id = (
+            str(self.source_evaluation_id) if self.source_evaluation_id is not None else None
+        )
+        self.source_evaluation_sha256 = (
+            str(self.source_evaluation_sha256)
+            if self.source_evaluation_sha256 is not None
+            else None
+        )
         self.source_evaluation_provenance = dict(self.source_evaluation_provenance or {})
         self.producer_provenance = dict(self.producer_provenance or {})
 
@@ -348,7 +371,7 @@ class Proposal:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Proposal":
+    def from_dict(cls, data: dict[str, Any]) -> Proposal:
         return cls(
             id=str(data.get("id") or uuid4().hex),
             trace_id=str(data.get("trace_id") or ""),

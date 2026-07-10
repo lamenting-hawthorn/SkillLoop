@@ -22,7 +22,9 @@ class ServiceService:
         self._store.init()
         kind = req.kind or supported_default_kind()
         if kind != "launchd":
-            raise SystemExit(f"Unsupported service kind for install: {kind}. Currently implemented: launchd")
+            raise SystemExit(
+                f"Unsupported service kind for install: {kind}. Currently implemented: launchd"
+            )
         spec = build_service_spec(
             project_root=self._store.root,
             state_dir=self._store.state_dir,
@@ -35,7 +37,9 @@ class ServiceService:
         return read_service_metadata(self._store.state_dir)
 
     def uninstall(self, launch_agents_dir: str | None) -> list[Path]:
-        return remove_launchd_service(state_dir=self._store.state_dir, launch_agents_dir=launch_agents_dir)
+        return remove_launchd_service(
+            state_dir=self._store.state_dir, launch_agents_dir=launch_agents_dir
+        )
 
 
 __all__ = ["ServiceService"]

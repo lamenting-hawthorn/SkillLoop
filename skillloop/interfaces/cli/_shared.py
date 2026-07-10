@@ -18,7 +18,11 @@ def _policy_path(store: SkillLoopStore) -> Path:
 
 
 def _load_policy(store: SkillLoopStore) -> SkillLoopPolicy:
-    return SkillLoopPolicy.load(_policy_path(store)) if _policy_path(store).exists() else SkillLoopPolicy.default()
+    return (
+        SkillLoopPolicy.load(_policy_path(store))
+        if _policy_path(store).exists()
+        else SkillLoopPolicy.default()
+    )
 
 
 def _format_count(label: str, count: int) -> str:
@@ -41,7 +45,11 @@ def _resolve_trace(store: SkillLoopStore, trace_ref: str) -> AgentTrace:
 
 def _resolve_proposal(store: SkillLoopStore, proposal_ref: str) -> Proposal:
     proposals = store.list_proposals(status=None)
-    matches = [proposal for proposal in proposals if proposal.id == proposal_ref or proposal.id.startswith(proposal_ref)]
+    matches = [
+        proposal
+        for proposal in proposals
+        if proposal.id == proposal_ref or proposal.id.startswith(proposal_ref)
+    ]
     if not matches:
         raise SystemExit(f"Proposal not found: {proposal_ref}")
     if len(matches) > 1:
@@ -76,12 +84,12 @@ def _service_interval_seconds(args: argparse.Namespace) -> int:
 
 
 __all__ = [
-    "_store",
-    "_policy_path",
-    "_load_policy",
-    "_format_count",
-    "_resolve_trace",
-    "_resolve_proposal",
     "_condition_from_args",
+    "_format_count",
+    "_load_policy",
+    "_policy_path",
+    "_resolve_proposal",
+    "_resolve_trace",
     "_service_interval_seconds",
+    "_store",
 ]

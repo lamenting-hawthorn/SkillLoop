@@ -41,10 +41,10 @@ class PolicyError(SkillLoopError):
 
 
 __all__ = [
-    "SkillLoopError",
     "ConfigError",
+    "ConnectorError",
     "InputError",
     "PersistenceError",
-    "ConnectorError",
     "PolicyError",
+    "SkillLoopError",
 ]

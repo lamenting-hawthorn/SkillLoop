@@ -6,8 +6,6 @@ import os
 import tempfile
 from pathlib import Path
 
-from skillloop.errors import PersistenceError
-
 FILE_MODE = 0o600
 DIR_MODE = 0o700
 

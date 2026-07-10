@@ -5,7 +5,12 @@ from skillloop.schema import AgentMessage, ToolCall
 
 
 def _command_text(call: ToolCall) -> str:
-    command = call.arguments.get("command") or call.arguments.get("cmd") or call.arguments.get("input") or ""
+    command = (
+        call.arguments.get("command")
+        or call.arguments.get("cmd")
+        or call.arguments.get("input")
+        or ""
+    )
     return str(command).lower()
 
 
@@ -33,7 +38,10 @@ def test_execution_evidence(calls: list[ToolCall]) -> list[dict[str, object]]:
     for call in calls:
         command = _command_text(call)
         result = str(call.result or "").lower()
-        if not any(marker in f"{command}\n{result}" for marker in ("pytest", "unittest", "tests/", "passed", "failed")):
+        if not any(
+            marker in f"{command}\n{result}"
+            for marker in ("pytest", "unittest", "tests/", "passed", "failed")
+        ):
             continue
         evidence.append(
             {
@@ -60,14 +68,20 @@ def file_artifact_evidence(calls: list[ToolCall]) -> list[dict[str, object]]:
     ]
 
 
-def user_feedback_evidence(messages: list[AgentMessage], correction_words: tuple[str, ...], learning_words: tuple[str, ...]) -> list[dict[str, object]]:
+def user_feedback_evidence(
+    messages: list[AgentMessage], correction_words: tuple[str, ...], learning_words: tuple[str, ...]
+) -> list[dict[str, object]]:
     evidence: list[dict[str, object]] = []
     for index, message in enumerate(messages):
         if message.role != "user":
             continue
         lowered = message.content.lower()
         if any(word in lowered for word in correction_words):
-            evidence.append({"kind": "user_feedback", "subtype": "correction", "message_index": index})
+            evidence.append(
+                {"kind": "user_feedback", "subtype": "correction", "message_index": index}
+            )
         if any(word in lowered for word in learning_words):
-            evidence.append({"kind": "user_feedback", "subtype": "learning_signal", "message_index": index})
+            evidence.append(
+                {"kind": "user_feedback", "subtype": "learning_signal", "message_index": index}
+            )
     return evidence

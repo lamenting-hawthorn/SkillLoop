@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from skillloop.fs_safety import safe_path_segment
@@ -13,14 +13,16 @@ SUPPORTED_PROPOSAL_KINDS = {"memory", "skill"}
 
 
 def export_okf_bundle(store: SkillLoopStore, out_dir: str | Path) -> Path:
-    approved = [p for p in store.list_proposals(status="approved") if p.kind in SUPPORTED_PROPOSAL_KINDS]
+    approved = [
+        p for p in store.list_proposals(status="approved") if p.kind in SUPPORTED_PROPOSAL_KINDS
+    ]
     bundle_root = Path(out_dir).resolve()
     bundle_root.mkdir(parents=True, exist_ok=True)
 
     concepts_dir = bundle_root / "concepts"
     concepts_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     entries: list[tuple[str, str, str, str, str]] = []
     written: list[Path] = []
 
@@ -47,11 +49,13 @@ def export_okf_bundle(store: SkillLoopStore, out_dir: str | Path) -> Path:
             frontmatter_lines.append(f"resource: {resource_uri}")
         frontmatter_lines.append(f"tags: [{', '.join(tags)}]")
         frontmatter_lines.append(f"timestamp: {timestamp}")
-        frontmatter_lines.extend([
-            f"proposal_id: {proposal_id}",
-            f"source_trace_id: {proposal.trace_id}",
-            f"proposal_kind: {proposal.kind}",
-        ])
+        frontmatter_lines.extend(
+            [
+                f"proposal_id: {proposal_id}",
+                f"source_trace_id: {proposal.trace_id}",
+                f"proposal_kind: {proposal.kind}",
+            ]
+        )
         if score is not None:
             frontmatter_lines.append(f"score: {score}")
         frontmatter_lines.append("---")
@@ -64,7 +68,16 @@ def export_okf_bundle(store: SkillLoopStore, out_dir: str | Path) -> Path:
         written.append(concept_path)
 
         relative_href = f"concepts/{proposal.kind}_{proposal_id}.md"
-        entries.append((concept_title, relative_href, concept_type, description, proposal.kind, proposal.trace_id))
+        entries.append(
+            (
+                concept_title,
+                relative_href,
+                concept_type,
+                description,
+                proposal.kind,
+                proposal.trace_id,
+            )
+        )
 
     _write_index(bundle_root, entries)
     _write_log(bundle_root, entries, timestamp)
@@ -96,12 +109,14 @@ def _write_index(bundle_root: Path, entries: list[tuple[str, str, str, str, str,
 def _write_log(
     bundle_root: Path,
     entries: list[tuple[str, str, str, str, str, str]],
-    timestamp: str,
+    timestamp: str,  # noqa: ARG001
 ) -> None:
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
     lines = ["# Bundle Update Log\n", f"## {date_str}\n"]
-    for title, href, ctype, desc, kind, trace_id in entries:
-        lines.append(f"* **Creation**: [{title}]({href}) — {ctype} from trace `{trace_id}` — {desc}\n")
+    for title, href, ctype, desc, _kind, trace_id in entries:
+        lines.append(
+            f"* **Creation**: [{title}]({href}) — {ctype} from trace `{trace_id}` — {desc}\n"
+        )
     log_path = bundle_root / "log.md"
     log_path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -110,7 +125,7 @@ def _write_okf_version(bundle_root: Path, timestamp: str) -> None:
     readme = bundle_root / "README.md"
     content = (
         f"---\n"
-        f"okf_version: \"{OKF_VERSION}\"\n"
+        f'okf_version: "{OKF_VERSION}"\n'
         f"type: Bundle README\n"
         f"title: SkillLoop Knowledge Bundle\n"
         f"description: Approved learning artifacts exported from SkillLoop as an OKF v{OKF_VERSION} bundle.\n"

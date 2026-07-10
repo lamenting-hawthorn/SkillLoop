@@ -10,7 +10,9 @@ def _trace(index: int) -> AgentTrace:
         id=f"trace-{index}",
         messages=[
             AgentMessage(role="user", content=f"Please complete task {index}."),
-            AgentMessage(role="assistant", content="Done. Verified with tests and documented the result."),
+            AgentMessage(
+                role="assistant", content="Done. Verified with tests and documented the result."
+            ),
         ],
     )
     trace.normalized_trace_sha256 = trace.compute_normalized_sha256()

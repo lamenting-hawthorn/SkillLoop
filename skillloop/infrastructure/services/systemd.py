@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
 from skillloop.fs_safety import ensure_not_symlink_escape, safe_path_segment
 from skillloop.ports.service_manager import ServiceManager, ServiceState
-
 from skillloop.service import (
     ServiceSpec,
     write_service_metadata,
@@ -56,9 +54,13 @@ class SystemdServiceManager(ServiceManager):
     kind = "systemd"
 
     def install(self, spec: ServiceSpec, *, launch_agents_dir: str | Path | None = None) -> Path:
-        ensure_not_symlink_escape(spec.state_dir, spec.project_root, label="service state directory")
+        ensure_not_symlink_escape(
+            spec.state_dir, spec.project_root, label="service state directory"
+        )
         spec.state_dir.mkdir(parents=True, exist_ok=True)
-        ensure_not_symlink_escape(spec.state_dir, spec.project_root, label="service state directory")
+        ensure_not_symlink_escape(
+            spec.state_dir, spec.project_root, label="service state directory"
+        )
         unit_path = systemd_unit_path(spec, launch_agents_dir)
         unit_path.parent.mkdir(parents=True, exist_ok=True)
         unit_path.write_text(systemd_unit(spec), encoding="utf-8")
@@ -73,16 +75,21 @@ class SystemdServiceManager(ServiceManager):
             check=True,
         )
 
-    def status(self, spec: ServiceSpec, *, launch_agents_dir: str | Path | None = None) -> ServiceState:
+    def status(
+        self, spec: ServiceSpec, *, launch_agents_dir: str | Path | None = None
+    ) -> ServiceState:
         unit_path = systemd_unit_path(spec, launch_agents_dir)
         installed = unit_path.exists()
         if not installed:
-            return ServiceState(kind=self.kind, label=spec.label, installed=False, active=False, path=None)
+            return ServiceState(
+                kind=self.kind, label=spec.label, installed=False, active=False, path=None
+            )
         enabled = (
             subprocess.run(
                 ["systemctl", "--user", "is-enabled", unit_path.name],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                check=False,
             ).returncode
             == 0
         )
@@ -91,6 +98,7 @@ class SystemdServiceManager(ServiceManager):
                 ["systemctl", "--user", "is-active", unit_path.name],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                check=False,
             ).returncode
             == 0
         )
@@ -102,12 +110,39 @@ class SystemdServiceManager(ServiceManager):
             path=str(unit_path),
         )
 
-    def uninstall(self, spec: ServiceSpec, *, launch_agents_dir: str | Path | None = None) -> list[Path]:
+    def install_message(self, spec: Any, path: str | Path) -> list[str]:
+        unit_name = Path(path).name
+        return [
+            f"Wrote systemd service unit to {path}",
+            f"label: {spec.label}",
+            f"interval_seconds: {spec.interval_seconds}",
+            "To start it now, run:",
+            f"systemctl --user enable --now {unit_name}",
+            "To stop it later, run:",
+            f"systemctl --user disable --now {unit_name}",
+        ]
+
+    def status_message(self, metadata: dict[str, Any]) -> list[str]:
+        path = Path(str(metadata.get("path", ""))).expanduser()
+        return [
+            "SkillLoop service: installed",
+            f"kind: {metadata.get('kind')}",
+            f"label: {metadata.get('label')}",
+            f"path: {path}",
+            f"unit_exists: {path.exists()}",
+            f"interval_seconds: {metadata.get('interval_seconds')}",
+            f"command: {' '.join(str(part) for part in metadata.get('command', []))}",
+        ]
+
+    def uninstall(
+        self, spec: ServiceSpec, *, launch_agents_dir: str | Path | None = None
+    ) -> list[Path]:
         unit_path = systemd_unit_path(spec, launch_agents_dir)
         subprocess.run(
             ["systemctl", "--user", "disable", unit_path.name],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            check=False,
         )
         removed: list[Path] = []
         if unit_path.exists():
@@ -122,5 +157,6 @@ class SystemdServiceManager(ServiceManager):
             ["systemctl", "--user", "daemon-reload"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            check=False,
         )
         return removed
