@@ -1,0 +1,48 @@
+target-version = "py311"
+line-length = 100
+
+[lint]
+select = ["ALL"]
+ignore = [
+    "D",       # pydocstyle
+    "ANN",     # flake8-annotations
+    "TRY003",  # avoid long exception messages
+    "EM101",   # exception must not use string literal
+    "EM102",   # exception must not use f-string
+    "TC001",   # type-checking block for application imports
+    "TC003",   # type-checking block for stdlib imports
+    "COM812",  # trailing comma (handled by formatter)
+    "FBT001",  # boolean positional arg
+    "FBT002",  # boolean default positional arg
+]
+
+[lint.isort]
+known-first-party = ["skillloop"]
+
+[format]
+line-ending = "lf"
+quote-style = "double"
+indent-style = "space"
+
+[lint.extend-per-file-ignores]
+"tests/**" = [
+    "S101",
+    "S603",
+    "S607",
+    "PLR2004",
+    "ARG001",
+    "ARG002",
+    "FBT001",
+    "FBT002",
+    "INP001",
+    "PT011",
+    "PT012",
+    "PT017",
+    "PT018",
+    "SLF001",
+    "N818",
+    "S105",
+    "PTH116",
+    "PLC0415",
+    "E501",
+]

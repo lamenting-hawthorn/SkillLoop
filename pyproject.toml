@@ -31,7 +31,7 @@ Issues = "https://github.com/lamenting-hawthorn/skillloop/issues"
 Source = "https://github.com/lamenting-hawthorn/skillloop"
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10"]
+dev = ["pytest>=8,<10", "ruff>=0.15", "mypy>=1.0", "coverage>=7.0"]
 
 [project.scripts]
 skillloop = "skillloop.cli:main"
@@ -40,8 +40,21 @@ skillloop = "skillloop.cli:main"
 addopts = "-q"
 testpaths = ["tests"]
 
+[tool.ruff]
+extend = "ruff.toml"
+
+[tool.mypy]
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+exclude = ["build/", "dist/", ".venv/", ".worktrees/"]
+
 [tool.coverage.run]
 branch = true
+source = ["skillloop"]
+command_line = "-m pytest"
+
+[tool.coverage.paths]
 source = ["skillloop"]
 
 [tool.setuptools.packages.find]

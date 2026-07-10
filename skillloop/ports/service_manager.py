@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -27,7 +28,7 @@ class ServiceManager(ABC):
     kind: str
 
     @abstractmethod
-    def install(self, spec, *, launch_agents_dir: str | Path | None = None) -> Path:
+    def install(self, spec: Any, *, launch_agents_dir: str | Path | None = None) -> Path:
         """Write the platform service definition and record metadata.
 
         Must NOT auto-activate the service. Returns the path of the written
@@ -35,13 +36,13 @@ class ServiceManager(ABC):
         """
 
     @abstractmethod
-    def activate(self, spec, *, launch_agents_dir: str | Path | None = None) -> None:
+    def activate(self, spec: Any, *, launch_agents_dir: str | Path | None = None) -> None:
         """Explicitly load/enable and start the installed service."""
 
     @abstractmethod
-    def status(self, spec, *, launch_agents_dir: str | Path | None = None) -> ServiceState:
+    def status(self, spec: Any, *, launch_agents_dir: str | Path | None = None) -> ServiceState:
         """Report whether the service is installed and active."""
 
     @abstractmethod
-    def uninstall(self, spec, *, launch_agents_dir: str | Path | None = None) -> list[Path]:
+    def uninstall(self, spec: Any, *, launch_agents_dir: str | Path | None = None) -> list[Path]:
         """Remove the definition file and recorded metadata. Returns removed paths."""
